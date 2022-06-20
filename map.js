@@ -3,7 +3,7 @@ var map_Obj = (function ()
 
     'use strict';
 
-    //===============样式===================================
+    //===============样式，用于样式基础===================================    
     //普通样式
     var nonTextStyle = new ol.style.Style({
 
@@ -44,7 +44,7 @@ var map_Obj = (function ()
         })
     });
     //选中样式
-    var selectTextStyle = new ol.style.Style({
+    let selectTextStyle = new ol.style.Style({
 
         image: new ol.style.Circle({
             radius: 7,
@@ -365,7 +365,7 @@ var map_Obj = (function ()
             // 返回要素
             var fe_temp = new ol.Feature(new ol.geom.Polygon(MultiPolygon.getCoordinates()[i]));
             //source.addFeature(fe_temp);
-            that.property.brush(selected_feature, fe_temp);
+            that.property.copyall(selected_feature, fe_temp);
             fes.push(fe_temp);
             isnew.push(true);
         }
@@ -392,6 +392,7 @@ var map_Obj = (function ()
         canvas: null,
         //操作模式 "draw":"select":"edit":"measure","view"
         model: null,
+
 
         //激活的图层
         active_layer: null,
@@ -518,6 +519,15 @@ var map_Obj = (function ()
         },
         //撤销
         undo: {
+            //撤销支持说明，仅支持在当前激活图层的操作，切换图层时，将丢失，撤销后失去选中效果：
+            /*
+            1、新画模式：点、线、面、洞、点集新建
+            2、选择模式：选中鼠标拖动、键盘快捷键移动、编辑顶点、复制、删除、合并、切割、手画切割
+            3、变形模式：支持
+            4、导入模式：线转面，（导入其他图层、清空当前图层，不支持）
+            5、属性：属性的修改保存、及复制粘贴。
+            6、颜色：颜色的修改保存
+            */
 
             // 撤回栈
             stack: [],
@@ -963,6 +973,38 @@ var map_Obj = (function ()
                 //[[Prototype]]: e
 
             },
+
+            //新建图形根据坐标点集
+            addFeatureByCo: function (lx, co)
+            {
+                let geom = null;
+                switch (lx)
+                {
+                    case 'Point':
+                        {
+                            geom = new ol.geom.Point(co);
+                        }
+                        break;
+                    case 'LineString':
+                        {
+                            geom = new ol.geom.LineString(co);
+                        }
+                        break;
+                    case 'Polygon':
+                        {
+                            geom = new ol.geom.Polygon(co);
+                        }
+                        break;
+                }
+
+                let feat = new ol.Feature(geom);
+                that.property.creat(feat);
+                FormatFeature(feat);
+                //将图形以新建模式送入撤销栈
+                that.undo.indo([feat], [true]);
+                that.active_layer.getSource().addFeature(feat);
+            },
+
             //===========================================================新画模式下辅助线================================================
             //获取所有辅助线数据
             fzx_getall: function ()
@@ -1271,14 +1313,14 @@ var map_Obj = (function ()
                 selected_feature.mystyle = newmodel;
                 //that.property.set(selected_feature, selected_feature);
 
-
                 selected_feature.changed();
             },
 
             //移动图形
             feature_move: function (selected_feature, step_x, step_y)
             {
-
+                //已修改模式进入撤回栈
+                that.undo.indo([selected_feature], [false]);
                 switch (selected_feature.getGeometry().getType())
                 {
                     case "Point":
@@ -1451,7 +1493,7 @@ var map_Obj = (function ()
                     var features = that.select.editpoints_interaction_select.getFeatures().getArray();
                     for (var i = 0; i < features.length; i++)
                     {
-                        features[i].setStyle(null);
+                        //features[i].setStyle(null);
                         if (that.select.editpoints_layer != that.layer.getByFeature(features[i]))
                         {
                             //移除不属于当前图层的图形
@@ -1902,7 +1944,7 @@ var map_Obj = (function ()
                             var fe = new ol.Feature(Polygon);
                             layer.getSource().addFeature(fe);
                             //复制属性
-                            that.property.brush(copyshuxingfeat, fe);
+                            that.property.copyall(copyshuxingfeat, fe);
                             FormatFeature(fe);
                             var indo_feats = [fe];
                             var indo_isnew = [true];
@@ -2628,7 +2670,7 @@ var map_Obj = (function ()
             //导入
             start: function ()
             {
-                that.active_layer = that.layer.getByID('daoru');
+                //that.active_layer = that.layer.getByID('daoru');
 
                 //选中操作后的样式变更及支持多选
                 that.daoru.interaction_select = new ol.interaction.Select({
@@ -2637,7 +2679,7 @@ var map_Obj = (function ()
 
                         //保持原有样式画虚线
                         // var tempstyle = that.layer.getByFeature(feature).getStyle()(feature);
-                        // tempstyle.getStroke().setLineDash([10, 10]);
+                        // tempstyle.getStroke().setLineDash([5, 5]);
 
                         var tempstyle = selectTextStyle.clone();
                         var name = feature.name;
@@ -2656,7 +2698,7 @@ var map_Obj = (function ()
                     var features = that.daoru.interaction_select.getFeatures().getArray();
                     for (var i = 0; i < features.length; i++)
                     {
-                        features[i].setStyle(null);
+                        //features[i].setStyle(null);
                         if (that.active_layer != that.layer.getByFeature(features[i]))
                         {
                             //移除不属于当前图层的图形
@@ -2673,14 +2715,15 @@ var map_Obj = (function ()
             },
             end: function ()
             {
-                that.active_layer = that.layer.getByID('jiegou');
+                //that.active_layer = that.layer.getByID('jiegou');
                 that.map.removeInteraction(that.daoru.interaction_select);
 
             },
-            //清理导入层数据
+            //清理层数据
             clear: function ()
             {
-                that.layer.getByID('daoru').getSource().clear();
+                that.active_layer.getSource().clear();
+                that.daoru.interaction_select.getFeatures().clear();
             },
 
             //将选中图形导入指定图层
@@ -2688,21 +2731,27 @@ var map_Obj = (function ()
             {
                 var feats = that.daoru.interaction_select.getFeatures().getArray();
                 var layertarget = that.layer.getByID(layerid);
-                var layersdaoru = that.layer.getByID('daoru');
+                //var layersdaoru = that.layer.getByID('daoru');
                 for (var i = 0; i < feats.length; i++)
                 {
                     that.property.creat(feats[i]);
                     feats[i].layer_name = layertarget.name;
                     layertarget.getSource().addFeature(feats[i]);
-                    layersdaoru.getSource().removeFeature(feats[i]);
+                    that.active_layer.getSource().removeFeature(feats[i]);
                 }
                 that.daoru.interaction_select.getFeatures().clear();
             },
 
+            //增加图形
+            addFeature: function (feat, co)
+            {
+                feat.getGeometry().setCoordinates(co);
+                that.undo.indo([feat], [true]);
+                that.active_layer.getSource().addFeature(feat);
+            },
             //===========================================================线面转换================================================
             lineStringToPolygon: function (lines)
             {
-
                 //判断是否所有传入值都是线
                 for (var i = 0; i < lines.length; i++)
                 {
@@ -2726,10 +2775,6 @@ var map_Obj = (function ()
                 //格式化
                 FormatFeature(resultfeat);
                 //that.property.creat(resultfeat);
-                that.undo.indo([resultfeat], [true]);
-
-                that.active_layer.getSource().addFeature(resultfeat);
-
                 return resultfeat;
 
             },
@@ -2758,13 +2803,14 @@ var map_Obj = (function ()
         },
         //===========================================================图层操作================================================
         layer: {
+            //图层配置
+            theme_layer: null,
             //初始化图层,根据设置
             init: function (theme_layer)
             {
+                that.layer.theme_layer = theme_layer;
                 var layers = [];
                 var layer_temp;
-
-
 
                 // layer_temp = that.layer.creat('selected', {
                 //     "name": "选中",
@@ -2790,10 +2836,9 @@ var map_Obj = (function ()
                 // });
                 // layers.push(layer_temp);
 
-
                 var keys = [];
 
-                for (let key in theme_layer)
+                for (let key in that.layer.theme_layer)
                 {
                     keys.push(key);
                 }
@@ -2801,13 +2846,20 @@ var map_Obj = (function ()
                 {
                     var key = keys[i];
                     //enumerableKeys.push(key);
-                    var layeritem = theme_layer[key];
+                    var layeritem = that.layer.theme_layer[key];
                     layer_temp = that.layer.creat(key, layeritem);
                     layers.push(layer_temp);
                 }
 
 
                 return layers;
+            },
+
+            //图层样式刷新
+            theme_layer_change: function (theme_layer)
+            {
+                that.layer.theme_layer = theme_layer;
+                that.refreshMap();
             },
             //新建图层-根据设置
             creat: function (key, layeritem)
@@ -2857,23 +2909,17 @@ var map_Obj = (function ()
                             style.image_ = new ol.style.Circle({
                                 radius: layeritem.size,
                                 fill: new ol.style.Fill({
-                                    color: layeritem.bordercolor,
+                                    color: that.layer.theme_layer[key].bordercolor,
                                 }),
                                 stroke: new ol.style.Stroke({
                                     color: [255, 255, 255, 0.75],
                                     width: 1.5
                                 })
                             });
-                            style.getStroke().setWidth(layeritem.size);
-                            style.getStroke().setColor(layeritem.bordercolor);
-                            var tmd = 1 - parseFloat(layeritem.fillopacity);
-                            tmd = tmd * 255;
-                            tmd = tmd.toFixed(0);
-                            tmd = parseInt(tmd);
-                            tmd = tmd.toString(16).toUpperCase();
-                            style.getFill().setColor(layeritem.fillcolor + tmd.toString(16).toUpperCase(0));
-
-
+                            style.getStroke().setWidth(that.layer.theme_layer[key].size);
+                            style.getStroke().setColor(that.layer.theme_layer[key].bordercolor);
+                            let tmd = 1 - parseFloat(that.layer.theme_layer[key].fillopacity);
+                            style.getFill().setColor(that.layer.theme_layer[key].fillcolor + that.opacity1to16(tmd));
 
                             //测量图层虚线
                             switch (that.layer.getByFeature(feature).id)
@@ -2897,7 +2943,8 @@ var map_Obj = (function ()
                 templayer.isenable = true;
                 //是否显示在页面的list中
                 templayer.isshowinlist = true;
-
+                //是否保存到工程文件
+                templayer.issavefile = true;
                 switch (key)
                 {
                     case 'jiegou'://结构
@@ -2912,6 +2959,9 @@ var map_Obj = (function ()
                         break;
                     case 'biaozhu'://标注
                         break;
+                    case 'daoru'://导入数据缓存':
+                        templayer.isenable = true;
+                        break;
                     case 'celiang'://测量
                         that.measure.layer = templayer;
                         templayer.isenable = false;
@@ -2920,6 +2970,7 @@ var map_Obj = (function ()
                         that.select.editpoints_layer = templayer;
                         templayer.isenable = false;
                         templayer.isshowinlist = false;
+                        templayer.issavefile = false;
                         break;
                     case 'yifu'://依附':
                         that.snap.layer = templayer;
@@ -2927,14 +2978,20 @@ var map_Obj = (function ()
                         templayer.isshowinlist = false;
                         break;
                     case 'chengguo'://成果渲染':
-                    case 'daoru'://导入数据缓存':
                         templayer.isenable = false;
-                        templayer.isshowinlist = false;
+                        templayer.issavefile = false;
                         break;
                     case 'shiqu'://拾取
                         that.shiqu.layer = templayer;
                         templayer.isenable = false;
                         templayer.isshowinlist = false;
+                        templayer.issavefile = false;
+                        break;
+                    case 'shiquxuanran'://拾取渲染
+                        templayer.isenable = false;
+                        templayer.isshowinlist = false;
+                        templayer.issavefile = false;
+                        that.shiquxuanran.layer = templayer;
                         break;
 
                 }
@@ -3102,6 +3159,74 @@ var map_Obj = (function ()
             },
         },
 
+        //===========================================================拾取渲染(没有撤销)================================================
+        //
+        shiquxuanran: {
+            //图层
+            layer: null,
+
+            //["x,y","x1,y1","x2,y2"]
+            //追加坐标点集，[[0,1]]根据长度判定是点，还是线,isfit是否飞到目标位置
+            append: function (co, isfit)
+            {
+
+
+
+                let feat_temp = null;
+                if (co.length == 0)
+                {
+                    throw '没有坐标信息';
+                }
+
+                if (co.length == 1)
+                {
+                    //点
+                    //判断当前图形是否已存在
+                    if (!that.shiquxuanran.ishave(co, 'Point'))
+                    {
+                        feat_temp = new ol.Feature(new ol.geom.Point(co[0]));
+                        that.shiquxuanran.layer.getSource().addFeature(feat_temp);
+                    }
+                }
+                else
+                {
+                    //线
+                    //判断当前图形是否已存在
+                    if (!that.shiquxuanran.ishave(co, 'LineString'))
+                    {
+                        feat_temp = new ol.Feature(new ol.geom.LineString(co));
+                        that.shiquxuanran.layer.getSource().addFeature(feat_temp);
+                    }
+                }
+                if (feat_temp != null && isfit)
+                {
+                    that.map.getView().fit(feat_temp.getGeometry().getExtent());
+                }
+            },
+            //判断当前否存在
+            ishave: function (co, type)
+            {
+                let result = false;
+                let feats = that.shiquxuanran.layer.getSource().getFeatures();
+                for (let i = 0; i < feats.length; i++)
+                {
+                    if (feats[i].getGeometry().getType() == type)
+                    {
+                        if (feats[i].getGeometry().getCoordinates().toString() == co.toString())
+                        {
+                            result = true;
+                            break;
+                        }
+                    }
+                }
+                return result;
+            },
+            //清理事件
+            clear: function ()
+            {
+                that.shiquxuanran.layer.getSource().clear();
+            },
+        },
         //===========================================================吸附相关================================================
         snap: {
             //吸附图层
@@ -3283,7 +3408,7 @@ var map_Obj = (function ()
                 sx.mystyle = feature.mystyle;
                 return sx;
             },
-            brush: function (sourceFeature, targetFeature)
+            copyall: function (sourceFeature, targetFeature)
             {
                 targetFeature.name = sourceFeature.name;
                 targetFeature.layer_name = sourceFeature.layer_name;
@@ -3291,6 +3416,19 @@ var map_Obj = (function ()
                 targetFeature.sx1 = sourceFeature.sx1;
                 targetFeature.sx2 = sourceFeature.sx2;
                 targetFeature.mystyle = sourceFeature.mystyle;
+                targetFeature.changed();
+            },
+            //属性刷粘贴,只刷业务属性
+            paset: function (sourceFeature, targetFeature)
+            {
+                //以更新模式进入撤回栈
+                that.undo.indo([targetFeature], [false]);
+                targetFeature.name = sourceFeature.name;
+                targetFeature.layer_name = sourceFeature.layer_name;
+                targetFeature.lx = sourceFeature.lx;
+                targetFeature.sx1 = sourceFeature.sx1;
+                targetFeature.sx2 = sourceFeature.sx2;
+                targetFeature.changed();
             }
         },
 
@@ -3300,7 +3438,7 @@ var map_Obj = (function ()
             getNewFeatureWithPropertyByFeature: function (feature)
             {
                 var new_feature = feature.clone();
-                that.property.brush(feature, new_feature);
+                that.property.copyall(feature, new_feature);
                 return new_feature
             },
             //获取数据集
@@ -3314,34 +3452,6 @@ var map_Obj = (function ()
                 that.undo.indo([feat], [false]);
                 feat.getGeometry().setCoordinates(co);
                 FormatFeature(feat);
-            },
-
-            //新建图形根据坐标点集
-            addFeatureByCo: function (lx, co)
-            {
-                var geom = null;
-                switch (lx)
-                {
-                    case 'Point':
-                        {
-                            geom = new ol.geom.Point(co);
-                        }
-                        break;
-                    case 'LineString':
-                        {
-                            geom = new ol.geom.LineString(co);
-                        }
-                        break;
-                    case 'Polygon':
-                        {
-                            geom = new ol.geom.Polygon(co);
-                        }
-                        break;
-                }
-
-                var feat = new ol.Feature(geom);
-                that.property.creat(feat);
-                that.active_layer.getSource().addFeature(feat);
             },
 
             //获取线图形长度--米
@@ -3417,6 +3527,7 @@ var map_Obj = (function ()
             //图层及图形
             solution.layers = [];
             var layers = that.map.getLayers().getArray();
+
             for (var i = 0; i < layers.length; i++)
             {
                 var layermodel = {};
@@ -3439,27 +3550,7 @@ var map_Obj = (function ()
                 var newsxs = [];
                 var vectorSource = layers[i].getSource();
                 //根据类型判断是否需要保存图形
-                var needsave = true;
-
-                switch (layermodel.id)
-                {
-                    case 'jiegou'://结构
-                        break;
-                    case 'celiang'://测量
-                        break;
-                    case 'dingdian'://顶点编辑':
-                        needsave = false;
-                        break;
-                    case 'yifu'://依附':
-                    case 'chengguo'://成果渲染':
-                    case 'daoru'://导入数据缓存':
-                        break;
-                    case 'shiqu'://拾取
-                        needsave = false;
-                        break;
-
-                }
-                if (needsave)
+                if (layers[i].issavefile)
                 {
                     vectorSource.forEachFeature(function (feature)
                     {
@@ -3496,31 +3587,81 @@ var map_Obj = (function ()
             //图层及图形
             var layers = json.layers;
             var layer_new = null;
-            for (var i = 0; i < layers.length; i++)
+            var layer_json = null;
+
+            //标准图层
+            var keys = [];
+            //反序
+            for (let key in that.layer.theme_layer)
             {
-                layer_new = that.layer.creat(layers[i].id, layers[i].mystyle);
-                //显隐
-                layer_new.setVisible(layers[i].visible);
-                //是否可操作
-                layer_new.isenable = layers[i].isenable;
-                if (layers[i].source != null)
+                keys.push(key);
+            }
+            for (var i = keys.length - 1; i >= 0; i--)
+            {
+                var key = keys[i];
+                //如果能在工程文件中找到则用工程文件，如果不行，则用默认配置
+                var temparray = json.layers.filter((item) =>
                 {
-                    //图形反序列化
-                    var feats = (new ol.format.GeoJSON()).readFeatures(layers[i].source);
-                    var sxs = layers[i].sx;
-                    //添加图形
-                    for (var j = 0; j < feats.length; j++)
+                    return item.id == key;
+                });
+                //默认配置
+                if (temparray.length == 0)
+                {
+                    //enumerableKeys.push(key);
+                    var layeritem = that.layer.theme_layer[key];
+                    layer_new = that.layer.creat(key, layeritem);
+                }
+                else
+                {
+                    layer_json = temparray[0];
+                    layer_new = that.layer.creat(layer_json.id, layer_json.mystyle);
+                    //显隐
+                    layer_new.setVisible(layer_json.visible);
+                    //是否可操作
+                    layer_new.isenable = layer_json.isenable;
+                    if (layer_json.source != null)
                     {
-                        var fe = feats[j];
-                        that.property.set(fe, sxs[j]);
-                        layer_new.getSource().addFeature(fe);
+                        //图形反序列化
+                        var feats = (new ol.format.GeoJSON()).readFeatures(layer_json.source);
+                        var sxs = layer_json.sx;
+                        //添加图形
+                        for (var j = 0; j < feats.length; j++)
+                        {
+                            var fe = feats[j];
+                            that.property.set(fe, sxs[j]);
+                            layer_new.getSource().addFeature(fe);
+                        }
                     }
                 }
                 that.map.addLayer(layer_new);
             }
 
+
+            // for (var i = 0; i < layers.length; i++)
+            // {
+            //     layer_new = that.layer.creat(layers[i].id, layers[i].mystyle);
+            //     //显隐
+            //     layer_new.setVisible(layers[i].visible);
+            //     //是否可操作
+            //     layer_new.isenable = layers[i].isenable;
+            //     if (layers[i].source != null)
+            //     {
+            //         //图形反序列化
+            //         var feats = (new ol.format.GeoJSON()).readFeatures(layers[i].source);
+            //         var sxs = layers[i].sx;
+            //         //添加图形
+            //         for (var j = 0; j < feats.length; j++)
+            //         {
+            //             var fe = feats[j];
+            //             that.property.set(fe, sxs[j]);
+            //             layer_new.getSource().addFeature(fe);
+            //         }
+            //     }
+            //     that.map.addLayer(layer_new);
+            // }
+
             //设定激活层
-            that.active_layer = that.map.getLayers().getArray()[layers.length - 1];
+            that.active_layer = that.layer.getByID('jiegou');
             ////设置中心点与缩放
             //that.map.getView().setCenter(json.center);
             //that.map.getView().setZoom(json.zoom);
@@ -3628,7 +3769,29 @@ var map_Obj = (function ()
         {
             var tik = +new Date() + '';
             return tik;
-        }
+        },
+
+        //不透明度，16进制转0-1
+        opacity16to1(ff)
+        {
+            let op = 1;
+            let tmd = parseInt(ff, 16);
+            tmd = tmd / 255;
+            tmd = tmd;
+            op = parseFloat(tmd.toFixed(1));
+            return op;
+        },
+        //不透明度，0-1进制转16
+        opacity1to16(op)
+        {
+            let ff = 'ff';
+            let tmd = parseFloat(op);
+            tmd = tmd * 255;
+            tmd = tmd.toFixed(0);
+            tmd = parseInt(tmd);
+            ff = tmd.toString(16).toUpperCase(0);
+            return ff;
+        },
     };
     return that;
 })();
