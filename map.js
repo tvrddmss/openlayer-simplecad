@@ -113,6 +113,18 @@ var map_Obj = (function ()
                         co[i][k] = [parseFloat(parseFloat(coo[k][0]).toFixed(4)),
                         parseFloat(parseFloat(coo[k][1]).toFixed(4))];
                     }
+
+                    //判断最后一个点是否与第一个点相同，否则加入一个点
+                    let coo_statr = coo[0];
+                    let coo_end = coo[coo.length - 1];
+                    if (coo_statr[0] == coo_end[0] && coo_statr[1] == coo_end[1])
+                    {
+
+                    }
+                    else
+                    {
+                        coo.push(coo[0]);
+                    }
                 }
                 //验证并调整点序
                 for (var i = 0; i < co.length; i++)
@@ -431,7 +443,7 @@ var map_Obj = (function ()
                 //===============辅助线初始化坐标原点============================
                 {
 
-                    that.draw.fzx_collection = [];
+                    that.snapGuides.collection = [];
                     var modal_fzx = {};
                     modal_fzx.id = 'x';
                     modal_fzx.name = 'X轴';
@@ -442,7 +454,7 @@ var map_Obj = (function ()
                     modal_fzx.points = [];
                     modal_fzx.points.push([parseFloat(modal_fzx.point1_x), parseFloat(modal_fzx.point1_y)]);
                     modal_fzx.points.push([parseFloat(modal_fzx.point2_x), parseFloat(modal_fzx.point2_y)]);
-                    that.draw.fzx_collection.push(modal_fzx);
+                    that.snapGuides.collection.push(modal_fzx);
 
                     modal_fzx = {};
                     modal_fzx.id = 'Y';
@@ -454,7 +466,7 @@ var map_Obj = (function ()
                     modal_fzx.points = [];
                     modal_fzx.points.push([parseFloat(modal_fzx.point1_x), parseFloat(modal_fzx.point1_y)]);
                     modal_fzx.points.push([parseFloat(modal_fzx.point2_x), parseFloat(modal_fzx.point2_y)]);
-                    that.draw.fzx_collection.push(modal_fzx);
+                    that.snapGuides.collection.push(modal_fzx);
 
                 }
 
@@ -489,7 +501,7 @@ var map_Obj = (function ()
                         color: 'rgba(255, 255, 255, 0.8)',
                         width: 0.6
                     }),
-                    targetSize: 100
+                    targetSize: 1
                 });
                 graticuleLayer.setMap(that.map);
 
@@ -508,6 +520,7 @@ var map_Obj = (function ()
                     var map = that.map;
                     var mapExtent = map.getView().calculateExtent(map.getSize());
                     var map_center = ol.extent.getCenter(mapExtent);
+                    //that.snapGuides.refresh();
                     //that.map_mouse_zb.innerText = "缩放级别：" + map.getView().getZoom() + "    屏幕中心点坐标：X:" + parseFloat(map_center[0]).toFixed(4) + "    Y:" + parseFloat(map_center[1]).toFixed(4);
                 });
             }
@@ -797,8 +810,6 @@ var map_Obj = (function ()
             interaction_draw: null,
             //新画模式，画图形结束事件
             event_draw_end: null,
-            //新画模式，辅助线集合
-            fzx_collection: [],
             //新画模式，辅助线控件
             interaction_snapGuides: null,
 
@@ -813,7 +824,7 @@ var map_Obj = (function ()
                 //画图的layer
                 that.map.removeInteraction(that.draw.interaction_draw);
                 //辅助线
-                that.map.removeInteraction(that.draw.interaction_snapGuides);
+                //that.map.removeInteraction(that.draw.interaction_snapGuides);
             },
 
             //根据所画类型变化
@@ -873,7 +884,7 @@ var map_Obj = (function ()
 
                             break;
                     }
-                    that.draw.fzx_refresh();
+                    that.snapGuides.refresh();
                     //画完之后如果不是画洞则给新增的图形，进行规范化数据坐标，并创建属性，加入退回栈等操作，如果是hole则单独操作
                     switch (type)
                     {
@@ -906,6 +917,15 @@ var map_Obj = (function ()
                             break;
                     }
                 }
+            },
+            //中止画图
+            finishDraw: function (bo)
+            {
+                if (bo)
+                {
+                    that.draw.interaction_draw.removeLastPoint();
+                }
+                that.draw.interaction_draw.finishDrawing();
             },
             //新画图形，修改坐标----之前版本用于参考
             update_co: function (coordinate)
@@ -1006,105 +1026,7 @@ var map_Obj = (function ()
             },
 
             //===========================================================新画模式下辅助线================================================
-            //获取所有辅助线数据
-            fzx_getall: function ()
-            {
-                return that.draw.fzx_collection;
-            },
-            //新建辅助线
-            fzx_add: function (model)
-            {
-                //计算坐标
-                model = that.draw.fzx_countpoint(model);
-                that.draw.fzx_collection.push(model);
-                that.draw.fzx_refresh();
-            },
-            //删除辅助线
-            fzx_delete: function (id)
-            {
-                var index = null;
-                for (var i = 0; i < that.draw.fzx_collection.length; i++)
-                {
-                    if (that.draw.fzx_collection[i].id == id)
-                    {
-                        index = i;
-                        break;
-                    }
-                }
-                if (index != null)
-                {
-                    that.draw.fzx_collection.splice(index, 1);
-                    that.draw.fzx_refresh();
-                }
-            },
-            //获取辅助线,通过ID
-            fzx_getfzxbyid: function (id)
-            {
-                var result = null;
-                for (var i = 0; i < that.draw.fzx_collection.length; i++)
-                {
-                    if (that.draw.fzx_collection[i].id == id)
-                    {
-                        result = that.draw.fzx_collection[i];
-                    }
-                }
-                return result;
-            },
-            //设置辅助线,通过ID
-            fzx_setfzxbyid: function (model)
-            {
-                //计算坐标
-                model = that.draw.fzx_countpoint(model);
-                for (var i = 0; i < that.draw.fzx_collection.length; i++)
-                {
-                    if (that.draw.fzx_collection[i].id == model.id)
-                    {
-                        that.draw.fzx_collection[i] = model;
-                    }
-                }
-                that.draw.fzx_refresh();
-            },
-            //辅助线刷新
-            fzx_refresh: function ()
-            {
-                if (that.draw.interaction_draw != null)
-                {
-                    that.map.removeInteraction(that.draw.interaction_snapGuides);
-                    that.draw.interaction_snapGuides = new ol.interaction.SnapGuides({
-                        vectorClass: ol.layer.VectorImage
-                    });
-                    that.map.addInteraction(that.draw.interaction_snapGuides);
-                    for (var i = 0; i < that.draw.fzx_collection.length; i++)
-                    {
-                        that.draw.interaction_snapGuides.addGuide(that.draw.fzx_collection[i].points);
-                    }
-                    that.draw.interaction_snapGuides.setDrawInteraction(that.draw.interaction_draw);
-                }
-            },
-            //计算坐标方法
-            fzx_countpoint: function (model)
-            {
-                model.points = [];
-                model.points.push([parseFloat(model.point1_x), parseFloat(model.point1_y)]);
-                switch (model.type)
-                {
-                    case 'zuobiao':
-                        model.points.push([parseFloat(model.point2_x), parseFloat(model.point2_y)]);
-                        break
-                    case 'jiaodu':
-                        var jiaodu = -parseFloat(model.jiaodu);
-                        jiaodu -= 90;
-                        if (jiaodu < -180)
-                        {
-                            jiaodu += 360;
-                        }
-                        // jiaodu = jiaodu;
-                        var destination = turf.rhumbDestination(turf.point(model.points[0]), 500, jiaodu, { units: 'miles' });
-                        model.points.push(destination.geometry.coordinates);
-                        break;
-                }
-                return model;
-            },
+
         },
         //选择
         select: {
@@ -1113,6 +1035,8 @@ var map_Obj = (function ()
             model: null,
             //选中模式中用于选中的操作控件
             interaction_select: null,
+            //选中模式中用于框选中的操作控件
+            interaction_dragbox: null,
             //选中模式中用于选中后移动的
             interaction_translate: null,
 
@@ -1166,42 +1090,14 @@ var map_Obj = (function ()
                 });
 
                 that.select.interaction_select.on('select', that.select.selected_change);
-                //===============选中模式操作--移动============================
-                {
-                    that.select.interaction_translate = new ol.interaction.Translate({
-                        features: that.select.interaction_select.getFeatures(),
-                        hitTolerance: 10,
-                    });
-                    //这样是动态给map插入这个属性。
-                    that.map.addInteraction(that.select.interaction_translate);
-                    that.select.interaction_translate.on("translatestart", function (e)
-                    {
-                        //拖动开始的监听函数
-                        //console.log("开始拖动");
-                        var item = e.features.item(0);
-                        that.undo.indo([item], [false]);
-                    });
+                that.map.addInteraction(that.select.interaction_select);
+                that.select.interaction_select.setActive(false);
 
-                    that.select.interaction_translate.on("translating", function (e)
-                    {
-                        //拖动中
-                        that.select.selected_change(e);
-                    });
 
-                    that.select.interaction_translate.on("translateend", function (e)
-                    {
-                        //拖到结束监听函数
-                        //console.log("拖动结束");
-                        var item = e.features.item(0);
-                        FormatFeature(item);
-                        that.select.selected_change(e);
-                    });
-                }
             },
 
             start: function ()
             {
-                that.map.addInteraction(that.select.interaction_select);
             },
             end: function ()
             {
@@ -1210,7 +1106,10 @@ var map_Obj = (function ()
                 that.map.removeInteraction(that.select.clip_interaction_draw);
 
                 //选中int
-                that.map.removeInteraction(that.select.interaction_select);
+                //that.map.removeInteraction(that.select.interaction_select);
+                that.select.interaction_select.setActive(false);
+                that.map.removeInteraction(that.select.interaction_translate);
+                that.map.removeInteraction(that.select.interaction_dragbox);
                 //选中后移动modify
                 that.select.clearSelect();
             },
@@ -1220,32 +1119,146 @@ var map_Obj = (function ()
                 //旧模式
                 switch (that.select.model)
                 {
+                    case 'pointselect':
+                        that.select.pointselect_end();
+                        break;
+                    case 'boxselect':
+                        that.select.boxselect_end();
+                        break;
                     case 'move':
+                        that.select.move_end();
                         break;
                     case 'editpoints':
                         that.select.editpoint_end();
                         break;
-                    case 'clipbydraw'://
-                        that.select.clip_bydraw_end();
+                    case 'copy':
+                        break;
+                    case 'delete':
+                        break;
+                    case 'union':
                         break;
                     case 'clip'://
-
+                        break;
+                    case 'clipbydraw'://
+                        that.select.clip_bydraw_end();
                         break;
                 }
                 that.select.model = type;
                 //新模式
                 switch (that.select.model)
                 {
+                    case 'pointselect':
+                        break;
+                    case 'boxselect':
+                        break;
                     case 'move':
                         break;
                     case 'editpoints':
                         break;
-                    case 'clipbydraw':
+                    case 'copy':
+                        break;
+                    case 'delete':
+                        break;
+                    case 'union':
                         break;
                     case 'clip':
                         break;
+                    case 'clipbydraw':
+                        break;
                 }
             },
+
+            //框选，开始结束
+            pointselect_start: function ()
+            {
+                that.select.interaction_select.setActive(true);
+            },
+            pointselect_end: function ()
+            {
+                that.select.interaction_select.setActive(false);
+                //that.map.removeInteraction(that.select.interaction_select);
+            },
+
+            //框选，开始结束
+            boxselect_start: function ()
+            {
+                //框选工具
+                // 创建绘制工具
+                that.select.interaction_dragbox = new ol.interaction.DragBox({
+                    condition: ol.events.condition.always,
+                    className: 'mapObj-select-boxselect',
+                });
+
+                // 开始绘制，
+                that.select.interaction_dragbox.on('boxstart', function ()
+                {
+                    that.select.interaction_select.getFeatures().clear();
+                });
+
+                // 结束绘制
+                that.select.interaction_dragbox.on('boxend', function ()
+                {
+                    // 获取被选择的要素
+                    var extent = that.select.interaction_dragbox.getGeometry().getExtent();
+                    that.active_layer.getSource().forEachFeatureIntersectingExtent(extent, function (feature)
+                    {
+                        that.select.interaction_select.getFeatures().push(feature);
+                    });
+                    that.select.selected_change();
+                });
+                that.map.addInteraction(that.select.interaction_dragbox);
+            },
+            boxselect_end: function ()
+            {
+                that.map.removeInteraction(that.select.interaction_dragbox);
+            },
+
+            //移动模式
+            move_start: function ()
+            {
+
+                //移动
+                that.select.interaction_translate = new ol.interaction.Translate({
+                    features: that.select.interaction_select.getFeatures(),
+                    hitTolerance: 10,
+                });
+                that.select.interaction_translate.on("translatestart", function (e)
+                {
+                    //拖动开始的监听函数
+                    //console.log("开始拖动");
+                    let undo_model = [];
+                    e.features.getArray().forEach(item =>
+                    {
+                        undo_model.push(false);
+                    });
+                    that.undo.indo(e.features.getArray(), undo_model);
+                });
+
+                that.select.interaction_translate.on("translating", function (e)
+                {
+                    //拖动中
+                    that.select.selected_change(e);
+                });
+
+                that.select.interaction_translate.on("translateend", function (e)
+                {
+                    //拖到结束监听函数
+                    //console.log("拖动结束");
+                    e.features.getArray().forEach(item =>
+                    {
+                        FormatFeature(item);
+                    });
+                    that.select.selected_change(e);
+                });
+                //这样是动态给map插入这个属性。
+                that.map.addInteraction(that.select.interaction_translate);
+            },
+            move_end: function ()
+            {
+                that.map.removeInteraction(that.select.interaction_translate);
+            },
+
+
 
             //清空选中
             clearSelect: function ()
@@ -1317,80 +1330,61 @@ var map_Obj = (function ()
             },
 
             //移动图形
-            feature_move: function (selected_feature, step_x, step_y)
+            selected_feature_move: function (step_x, step_y)
             {
-                //已修改模式进入撤回栈
-                that.undo.indo([selected_feature], [false]);
-                switch (selected_feature.getGeometry().getType())
+                //判定在移动模式下
+                if (that.model == 'select' && that.select.model == 'move')
                 {
-                    case "Point":
-                        var co = selected_feature.getGeometry().getCoordinates();
-                        co[0] += step_x;
-                        co[1] += step_y;
-                        selected_feature.getGeometry().setCoordinates(co);
-                        break;
-                    case "LineString":
-                        var co = [];
-                        for (var i = 0; i < selected_feature.getGeometry().getCoordinates().length; i++)
+                    //已修改模式进入撤回栈
+                    let undo_model = [];
+                    that.select.interaction_select.getFeatures().getArray().forEach(item =>
+                    {
+                        undo_model.push(false);
+                    });
+                    that.undo.indo(that.select.interaction_select.getFeatures().getArray(), undo_model);
+                    that.select.interaction_select.getFeatures().getArray().forEach(selected_feature =>
+                    {
+                        switch (selected_feature.getGeometry().getType())
                         {
-                            var coo = selected_feature.getGeometry().getCoordinates()[i];
-                            coo[0] += step_x;
-                            coo[1] += step_y;
-                            co.push(coo);
-                        }
-                        selected_feature.getGeometry().setCoordinates(co);
-                        break;
-                    case "Polygon":
-
-                        var co = [];
-                        for (var i = 0; i < selected_feature.getGeometry().getCoordinates().length; i++)
-                        {
-                            var coo = selected_feature.getGeometry().getCoordinates()[i];
-                            for (var k = 0; k < selected_feature.getGeometry().getCoordinates()[i].length; k++)
-                            {
-                                coo[k][0] += step_x;
-                                coo[k][1] += step_y;
-                            }
-                            co.push(coo);
-                        }
-                        selected_feature.getGeometry().setCoordinates(co);
-                        break;
-
-                    case "MultiPolygon":
-                        var ar = selected_feature.getGeometry().getCoordinates();
-                        var co = [];
-                        for (var i = 0; i < ar.length; i++)
-                        {
-                            var arr = ar[i];
-                            var coo = [];
-                            for (var k = 0; k < arr.length; k++)
-                            {
-                                var arrr = arr[k];
-                                var cooo = [];
-                                for (var j = 0; j < arrr.length; j++)
+                            case "Point":
+                                var co = selected_feature.getGeometry().getCoordinates();
+                                co[0] += step_x;
+                                co[1] += step_y;
+                                selected_feature.getGeometry().setCoordinates(co);
+                                break;
+                            case "LineString":
+                                var co = [];
+                                for (var i = 0; i < selected_feature.getGeometry().getCoordinates().length; i++)
                                 {
-                                    arrr[j][0] += step_x;
-                                    arrr[j][1] += step_y;
-                                    cooo.push(arrr[j]);
+                                    var coo = selected_feature.getGeometry().getCoordinates()[i];
+                                    coo[0] += step_x;
+                                    coo[1] += step_y;
+                                    co.push(coo);
                                 }
-                                coo.push(cooo);
-                            }
-                            co.push(coo);
-                        }
+                                selected_feature.getGeometry().setCoordinates(co);
+                                break;
+                            case "Polygon":
 
-                        selected_feature.getGeometry().setCoordinates(co);
-                        break;
-                    case "Circle":
-                        var co = selected_feature.getGeometry().getCenter();
-                        co[0] += step_x;
-                        co[1] += step_y;
-                        selected_feature.getGeometry().setCenter(co);
-                        break;
-                }
-                FormatFeature(selected_feature);
-                if (that.select.event_feature_co_changed != null)
-                {
-                    that.select.event_feature_co_changed();
+                                var co = [];
+                                for (var i = 0; i < selected_feature.getGeometry().getCoordinates().length; i++)
+                                {
+                                    var coo = selected_feature.getGeometry().getCoordinates()[i];
+                                    for (var k = 0; k < selected_feature.getGeometry().getCoordinates()[i].length; k++)
+                                    {
+                                        coo[k][0] += step_x;
+                                        coo[k][1] += step_y;
+                                    }
+                                    co.push(coo);
+                                }
+                                selected_feature.getGeometry().setCoordinates(co);
+                                break;
+                        }
+                        FormatFeature(selected_feature);
+                    });
+                    if (that.select.event_feature_co_changed != null)
+                    {
+                        that.select.event_feature_co_changed();
+                    }
                 }
 
             },
@@ -1419,8 +1413,8 @@ var map_Obj = (function ()
                         break;
                 }
                 //屏蔽选中和移动
-                that.select.interaction_select.setActive(false);
-                that.select.interaction_translate.setActive(false);
+                // that.select.interaction_select.setActive(false);
+                // that.select.interaction_translate.setActive(false);
 
                 //坐标点集合
                 that.select.editpoints_collection = [];
@@ -1629,6 +1623,9 @@ var map_Obj = (function ()
                             },
                         });
                         that.map.addInteraction(that.select.editpoints_interaction_modify);
+
+                        //刷新辅助线
+                        that.snapGuides.refresh();
                         that.select.editpoints_interaction_modify.on('modifystart', function (e)
                         {
                             //加入预设图形
@@ -1779,6 +1776,7 @@ var map_Obj = (function ()
                 //去除编辑图层的选中及移动
                 that.map.removeInteraction(that.select.editpoints_interaction_select);
                 that.map.removeInteraction(that.select.editpoints_interaction_translate);
+                that.map.removeInteraction(that.select.editpoints_interaction_modify);
 
                 if (that.select.editpoints_collection != null && that.select.editpoints_collection.length > 0)
                 {
@@ -1796,8 +1794,8 @@ var map_Obj = (function ()
                     //格式化编辑后的图形
                     FormatFeature(that.select.getSelectFeatures()[0]);
                     //放开选中和移动
-                    that.select.interaction_select.setActive(true);
-                    that.select.interaction_translate.setActive(true);
+                    // that.select.interaction_select.setActive(true);
+                    // that.select.interaction_translate.setActive(true);
                 }
                 //是否触发关闭窗口事件
                 if (that.select.event_editpoints_end != null)
@@ -1809,68 +1807,79 @@ var map_Obj = (function ()
             //复制--偏移量数组，x,y
             copy: function (pianyi)
             {
-                var step_x = pianyi[0];
-                var step_y = pianyi[1];
+                let step_x = pianyi[0];
+                let step_y = pianyi[1];
                 if (that.select.getSelectFeatures().length == 0)
                 {
                     throw '未选中图形';
                     return;
                 }
-                var selected_feature = that.select.getSelectFeatures()[0];
-
-                var new_feature = that.feature.getNewFeatureWithPropertyByFeature(selected_feature);
-                new_feature.name += "（复制）";
-                //偏移
-                switch (new_feature.getGeometry().getType())
+                let selected_features = that.select.getSelectFeatures();
+                let new_feats = [];
+                let undo_model = [];
+                selected_features.forEach(feat =>
                 {
-                    case "Point":
-                        var co = new_feature.getGeometry().getCoordinates();
-                        co[0] += step_x;
-                        co[1] += step_y;
-                        new_feature.getGeometry().setCoordinates(co);
-                        break;
-                    case "LineString":
-                        var co = [];
-                        for (var i = 0; i < new_feature.getGeometry().getCoordinates().length; i++)
-                        {
-                            var coo = new_feature.getGeometry().getCoordinates()[i];
-                            coo[0] += step_x;
-                            coo[1] += step_y;
-                            co.push(coo);
-                        }
-                        new_feature.getGeometry().setCoordinates(co);
-                        break;
-                    case "Polygon":
-
-                        var co = [];
-                        for (var i = 0; i < new_feature.getGeometry().getCoordinates().length; i++)
-                        {
-                            var coo = new_feature.getGeometry().getCoordinates()[i];
-                            for (var k = 0; k < new_feature.getGeometry().getCoordinates()[i].length; k++)
+                    let new_feat = that.feature.getNewFeatureWithPropertyByFeature(feat);
+                    new_feat.name += "（复制）";
+                    //偏移
+                    switch (new_feat.getGeometry().getType())
+                    {
+                        case "Point":
+                            var co = new_feat.getGeometry().getCoordinates();
+                            co[0] += step_x;
+                            co[1] += step_y;
+                            new_feat.getGeometry().setCoordinates(co);
+                            break;
+                        case "LineString":
+                            var co = [];
+                            for (var i = 0; i < new_feat.getGeometry().getCoordinates().length; i++)
                             {
-                                coo[k][0] += step_x;
-                                coo[k][1] += step_y;
+                                var coo = new_feat.getGeometry().getCoordinates()[i];
+                                coo[0] += step_x;
+                                coo[1] += step_y;
+                                co.push(coo);
                             }
-                            co.push(coo);
-                        }
-                        new_feature.getGeometry().setCoordinates(co);
-                        break;
+                            new_feat.getGeometry().setCoordinates(co);
+                            break;
+                        case "Polygon":
 
-                }
-                that.active_layer.getSource().addFeatures([new_feature]);
-                that.undo.indo([new_feature], [true]);
+                            var co = [];
+                            for (var i = 0; i < new_feat.getGeometry().getCoordinates().length; i++)
+                            {
+                                var coo = new_feat.getGeometry().getCoordinates()[i];
+                                for (var k = 0; k < new_feat.getGeometry().getCoordinates()[i].length; k++)
+                                {
+                                    coo[k][0] += step_x;
+                                    coo[k][1] += step_y;
+                                }
+                                co.push(coo);
+                            }
+                            new_feat.getGeometry().setCoordinates(co);
+                            break;
+
+                    }
+                    new_feats.push(new_feat)
+                    undo_model.push(true);
+                });
+                that.active_layer.getSource().addFeatures(new_feats);
+                that.undo.indo(new_feats, undo_model);
             },
             //删除
             delete: function ()
             {
-                if (that.select.getSelectFeatures().length == 0)
-                {
-                    return;
-                }
-                var selected_feature = that.select.getSelectFeatures()[0];
+                let selected_feats = that.select.getSelectFeatures();
+                let selected_feats_undo_model = [];
 
-                that.undo.indo([selected_feature], [false]);
-                that.active_layer.getSource().removeFeature(selected_feature);
+                //组织退回栈
+                for (let i = 0; i < selected_feats.length; i++)
+                {
+                    selected_feats_undo_model.push(false);
+                }
+                that.undo.indo(selected_feats, selected_feats_undo_model);
+                selected_feats.forEach(feats =>
+                {
+                    that.active_layer.getSource().removeFeature(feats);
+                });
                 //清空选中，这样才能消除显示
                 that.select.clearSelect();
             },
@@ -2032,8 +2041,8 @@ var map_Obj = (function ()
                 //暂时取消点选
                 //选中int
                 //that.map.removeInteraction(that.select.interaction_select);
-                that.select.interaction_select.setActive(false);
-                that.select.interaction_translate.setActive(false);
+                // that.select.interaction_select.setActive(false);
+                // that.select.interaction_translate.setActive(false);
                 //分割按钮画线工具
                 that.select.clip_interaction_draw = new ol.interaction.Draw({
                     source: that.active_layer.getSource(),
@@ -2041,7 +2050,8 @@ var map_Obj = (function ()
                 });
                 //添加切割画线工具
                 that.map.addInteraction(that.select.clip_interaction_draw);
-
+                //刷新辅助线
+                that.snapGuides.refresh();
                 that.select.clip_interaction_draw.on('drawstart', function (event)
                 {
                     //打开吸附
@@ -2086,8 +2096,8 @@ var map_Obj = (function ()
                 //去除切割画线工具
                 that.map.removeInteraction(that.select.clip_interaction_draw);
                 //开放点选
-                that.select.interaction_select.setActive(true);
-                that.select.interaction_translate.setActive(true);
+                // that.select.interaction_select.setActive(true);
+                // that.select.interaction_translate.setActive(true);
 
                 that.select.clearSelect();
             },
@@ -2216,6 +2226,19 @@ var map_Obj = (function ()
             //overlay内容
             tooltipElement: null,
 
+            //横线
+            h_feat: null,
+            h_element: null,
+            h_overlay: null,
+
+
+            //竖线
+            s_feat: null,
+            s_element: null,
+            s_overlay: null,
+
+
+
             start: function ()
             {
                 that.map.on('singleclick', that.measure.pointListener);
@@ -2230,6 +2253,7 @@ var map_Obj = (function ()
             //清空测量
             clear: function ()
             {
+                that.measure.interaction_draw.finishDrawing();
                 that.measure.layer.getSource().clear();
                 for (var i = 0; i < that.measure.overlay_collection.length; i++)
                 {
@@ -2241,10 +2265,12 @@ var map_Obj = (function ()
             //测量类型变化
             typeChange: function (type)
             {
-
+                if (that.measure.interaction_draw != null)
+                {
+                    that.measure.interaction_draw.finishDrawing();
+                }
                 that.map.removeInteraction(that.measure.interaction_draw);
 
-                //(type == 'area' ? 'Polygon' : 'LineString');
                 that.measure.interaction_draw = new ol.interaction.Draw({
                     source: that.measure.layer.getSource(),
                     type: (type),
@@ -2273,6 +2299,7 @@ var map_Obj = (function ()
 
                 //显示吸附
                 that.snap.show();
+                that.snapGuides.refresh();
                 var listener;
                 that.measure.interaction_draw.on('drawstart',
                     function (evt)
@@ -2280,6 +2307,65 @@ var map_Obj = (function ()
                         that.measure.createTooltip();
                         that.measure.overlay_collection.push(that.measure.tooltip);
                         var tooltipCoord = evt.coordinate;
+
+                        if (that.measure.interaction_draw.type_ == "LineString")
+                        {
+
+                            let startco = evt.target.finishCoordinate_;
+                            let endco = evt.target.finishCoordinate_;
+                            //横线
+                            {
+                                that.measure.h_feat = new ol.Feature(new ol.geom.LineString([startco, [endco[0], startco[1]]]));
+                                that.measure.h_feat.lineDash = [10, 10];
+                                that.measure.layer.getSource().addFeature(that.measure.h_feat);
+                                if (that.measure.h_element)
+                                {
+                                    that.measure.h_element.parentNode.removeChild(that.measure.h_element);
+                                }
+                                that.measure.h_element = document.createElement('div');
+                                that.measure.h_element.className = 'tooltip tooltip-static';
+                                that.measure.h_ovlay =
+                                    new ol.Overlay({
+                                        id: "measureh",
+                                        element: that.measure.h_element,
+                                        offset: [15, -15],
+                                        positioning: 'bottom-center'
+                                    });
+                                that.measure.overlay_collection.push(that.measure.h_ovlay);
+                                that.map.addOverlay(that.measure.h_ovlay);
+
+                                let tooltipCoord = [(startco[0] + endco[0]) / 2, startco[1]];
+                                that.measure.h_ovlay.setPosition(tooltipCoord);
+                                that.measure.h_ovlay.myposition = tooltipCoord;
+                            }
+                            //竖线
+                            {
+                                that.measure.s_feat = new ol.Feature(new ol.geom.LineString([[endco[0], startco[1]], endco]));
+                                that.measure.s_feat.lineDash = [10, 10];
+                                that.measure.layer.getSource().addFeature(that.measure.s_feat);
+                                if (that.measure.s_element)
+                                {
+                                    that.measure.s_element.parentNode.removeChild(that.measure.s_element);
+                                }
+                                that.measure.s_element = document.createElement('div');
+                                that.measure.s_element.className = 'tooltip tooltip-static';
+                                that.measure.s_ovlay =
+                                    new ol.Overlay({
+                                        id: "measureh",
+                                        element: that.measure.s_element,
+                                        offset: [15, -15],
+                                        positioning: 'bottom-center'
+                                    });
+                                that.measure.overlay_collection.push(that.measure.s_ovlay);
+                                that.map.addOverlay(that.measure.s_ovlay);
+
+                                let tooltipCoord = [endco[0], (startco[1] + endco[1]) / 2];
+                                that.measure.s_ovlay.setPosition(tooltipCoord);
+                                that.measure.s_ovlay.myposition = tooltipCoord;
+                            }
+
+                        }
+
                         listener = evt.feature.getGeometry().on('change',
                             function (evt)
                             {
@@ -2293,6 +2379,53 @@ var map_Obj = (function ()
                                 {
                                     output = that.measure.formatLength(geom, 1);
                                     tooltipCoord = geom.getLastCoordinate();
+
+
+                                    let startco = geom.getCoordinates()[0];
+                                    let endco = geom.getLastCoordinate();
+                                    //横线
+                                    {
+                                        that.measure.h_feat.getGeometry().setCoordinates([startco, [endco[0], startco[1]]]);
+
+                                        let h_output = '<div style="color:white;">';
+                                        h_output += '<br/>左右：<br/>';
+                                        var len_dx = startco[0] - endco[0];
+                                        if (Math.abs(len_dx) > 1000)
+                                        {
+                                            h_output += parseFloat(len_dx / 1000).toFixed(4) + '' + 'km';
+                                        }
+                                        else
+                                        {
+                                            h_output += parseFloat(len_dx).toFixed(4) + '' + 'm';
+                                        }
+                                        h_output += '</div>';
+                                        that.measure.h_element.innerHTML = h_output;
+                                        let h_tooltipCoord = [(startco[0] + endco[0]) / 2, startco[1]];
+                                        that.measure.h_ovlay.setPosition(h_tooltipCoord);
+                                        that.measure.h_ovlay.myposition = h_tooltipCoord;
+                                    }
+                                    //竖线
+                                    {
+                                        that.measure.s_feat.getGeometry().setCoordinates([[endco[0], startco[1]], endco]);
+
+                                        let s_output = '<div style="color:white;">';
+                                        s_output += '<br/>上下：<br/>';
+                                        var len_dx = startco[1] - endco[1];
+                                        if (Math.abs(len_dx) > 1000)
+                                        {
+                                            s_output += parseFloat(len_dx / 1000).toFixed(4) + '' + 'km';
+                                        }
+                                        else
+                                        {
+                                            s_output += parseFloat(len_dx).toFixed(4) + '' + 'm';
+                                        }
+
+                                        s_output += '</div>';
+                                        that.measure.s_element.innerHTML = s_output;
+                                        let s_tooltipCoord = [endco[0], (startco[1] + endco[1]) / 2];
+                                        that.measure.s_ovlay.setPosition(s_tooltipCoord);
+                                        that.measure.s_ovlay.myposition = s_tooltipCoord;
+                                    }
                                 }
                                 that.measure.tooltipElement.innerHTML = output;
                                 that.measure.tooltip.setPosition(tooltipCoord);
@@ -2308,78 +2441,17 @@ var map_Obj = (function ()
                         {
                             case 'LineString':
                                 var co = evt.feature.getGeometry().getCoordinates();
-                                var startco = co[0];
-                                var endco = co[co.length - 1];
                                 //横线
                                 {
-                                    var f_h = new ol.Feature(new ol.geom.LineString([startco, [endco[0], startco[1]]]));
-                                    f_h.lineDash = [10, 10];
-                                    that.measure.layer.getSource().addFeature(f_h);
-                                    var element_h = document.createElement('div');
-                                    element_h.className = 'tooltip tooltip-static';
-                                    var ovlay_h =
-                                        new ol.Overlay({
-                                            id: "measureh",
-                                            element: element_h,
-                                            offset: [15, -15],
-                                            positioning: 'bottom-center'
-                                        });
-                                    var output = '<div style="color:white;">';
-                                    output += '<br/>左右：<br/>';
-                                    var len_dx = startco[0] - endco[0];
-                                    if (Math.abs(len_dx) > 1000)
-                                    {
-                                        output += parseFloat(len_dx / 1000).toFixed(4) + '' + 'km';
-                                    }
-                                    else
-                                    {
-                                        output += parseFloat(len_dx).toFixed(4) + '' + 'm';
-                                    }
-                                    output += '</div>';
-                                    element_h.innerHTML = output;
-
-                                    that.measure.overlay_collection.push(ovlay_h);
-                                    that.map.addOverlay(ovlay_h);
-
-                                    var tooltipCoord = [(startco[0] + endco[0]) / 2, startco[1]];
-                                    ovlay_h.setPosition(tooltipCoord);
-                                    ovlay_h.myposition = tooltipCoord;
+                                    that.measure.h_element = null;
+                                    that.measure.h_feat = null;
+                                    that.measure.h_overlay = null;
                                 }
                                 //竖线
                                 {
-                                    var f_s = new ol.Feature(new ol.geom.LineString([[endco[0], startco[1]], endco]));
-                                    f_s.lineDash = [10, 10];
-                                    that.measure.layer.getSource().addFeature(f_s);
-                                    var element_s = document.createElement('div');
-                                    element_s.className = 'tooltip tooltip-static';
-                                    var ovlay_s =
-                                        new ol.Overlay({
-                                            id: "measures",
-                                            element: element_s,
-                                            offset: [15, -15],
-                                            positioning: 'bottom-center'
-                                        });
-
-                                    var output = '<div style="color:white;">';
-                                    output += '<br/>上下：<br/>';
-                                    var len_dx = startco[1] - endco[1];
-                                    if (Math.abs(len_dx) > 1000)
-                                    {
-                                        output += parseFloat(len_dx / 1000).toFixed(4) + '' + 'km';
-                                    }
-                                    else
-                                    {
-                                        output += parseFloat(len_dx).toFixed(4) + '' + 'm';
-                                    }
-
-                                    output += '</div>';
-                                    element_s.innerHTML = output;
-
-                                    that.measure.overlay_collection.push(ovlay_s);
-                                    that.map.addOverlay(ovlay_s);
-                                    var tooltipCoord = [endco[0], (startco[1] + endco[1]) / 2];
-                                    ovlay_s.setPosition(tooltipCoord);
-                                    ovlay_s.myposition = tooltipCoord;
+                                    that.measure.s_element = null;
+                                    that.measure.s_feat = null;
+                                    that.measure.s_overlay = null;
                                 }
                                 break;
                         }
@@ -2475,30 +2547,6 @@ var map_Obj = (function ()
                     length = parseFloat(line.getLength()).toFixed(4);
                     output += (length) + '' + 'm';
                 }
-
-                // var points = line.getCoordinates();
-                // //东西
-                // var len_dx = points[points.length - 1][0] - points[0][0];
-                // output += '<br/>左右：<br/>';
-                // if (Math.abs(len_dx) > 1000)
-                // {
-                //     output += parseFloat(len_dx / 1000).toFixed(4) + '' + 'km';
-                // }
-                // else
-                // {
-                //     output += parseFloat(len_dx).toFixed(4) + '' + 'm';
-                // }
-                // //南北
-                // var len_nb = points[points.length - 1][1] - points[0][1];
-                // output += '<br/>上下：<br/>';
-                // if (Math.abs(len_nb) > 1000)
-                // {
-                //     output += parseFloat(len_nb / 1000).toFixed(4) + '' + 'km';
-                // }
-                // else
-                // {
-                //     output += parseFloat(len_nb).toFixed(4) + '' + 'm';
-                // }
                 output += '</div>';
                 return output;
             },
@@ -2801,6 +2849,132 @@ var map_Obj = (function ()
                 return jiaodian;
             },
         },
+        //===========================================================辅助线================================================
+        snapGuides: {
+
+            //新画模式，辅助线集合
+            collection: [],
+            //是否显示新画时的垂直辅助线
+            draw_vertical: true,
+            //获取所有辅助线数据
+            getall: function ()
+            {
+                return that.snapGuides.collection;
+            },
+
+            //设置是否显示新画下的垂直于画线的辅助线
+            setDrawVertical: function (bo)
+            {
+                that.snapGuides.draw_vertical = bo;
+                that.snapGuides.refresh();
+            },
+
+            //新建辅助线
+            add: function (model)
+            {
+                //计算坐标
+                model = that.snapGuides.countpoint(model);
+                that.snapGuides.collection.push(model);
+                that.snapGuides.refresh();
+            },
+            //删除辅助线
+            delete: function (id)
+            {
+                var index = null;
+                for (var i = 0; i < that.snapGuides.collection.length; i++)
+                {
+                    if (that.snapGuides.collection[i].id == id)
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+                if (index != null)
+                {
+                    that.snapGuides.collection.splice(index, 1);
+                    that.snapGuides.refresh();
+                }
+            },
+            //获取辅助线,通过ID
+            getfzxbyid: function (id)
+            {
+                var result = null;
+                for (var i = 0; i < that.snapGuides.collection.length; i++)
+                {
+                    if (that.snapGuides.collection[i].id == id)
+                    {
+                        result = that.snapGuides.collection[i];
+                    }
+                }
+                return result;
+            },
+            //设置辅助线,通过ID
+            setfzxbyid: function (model)
+            {
+                //计算坐标
+                model = that.snapGuides.countpoint(model);
+                for (var i = 0; i < that.snapGuides.collection.length; i++)
+                {
+                    if (that.snapGuides.collection[i].id == model.id)
+                    {
+                        that.snapGuides.collection[i] = model;
+                    }
+                }
+                that.snapGuides.refresh();
+            },
+            //辅助线刷新
+            refresh: function ()
+            {
+                // if (that.draw.interaction_draw != null)
+                // {
+                that.map.removeInteraction(that.draw.interaction_snapGuides);
+
+                let snapGuidesStyle = new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#FFFF00',
+                        width: 1,
+                    })
+                });
+                that.draw.interaction_snapGuides = new ol.interaction.SnapGuides({
+                    vectorClass: ol.layer.VectorImage,
+                    // style: snapGuidesStyle
+                });
+                that.map.addInteraction(that.draw.interaction_snapGuides);
+                for (var i = 0; i < that.snapGuides.collection.length; i++)
+                {
+                    that.draw.interaction_snapGuides.addGuide(that.snapGuides.collection[i].points);
+                }
+                if (that.snapGuides.draw_vertical && that.draw.interaction_draw != null)
+                {
+                    that.draw.interaction_snapGuides.setDrawInteraction(that.draw.interaction_draw);
+                }
+                // }
+            },
+            //计算坐标方法
+            countpoint: function (model)
+            {
+                model.points = [];
+                model.points.push([parseFloat(model.point1_x), parseFloat(model.point1_y)]);
+                switch (model.type)
+                {
+                    case 'zuobiao':
+                        model.points.push([parseFloat(model.point2_x), parseFloat(model.point2_y)]);
+                        break
+                    case 'jiaodu':
+                        var jiaodu = -parseFloat(model.jiaodu);
+                        jiaodu -= 90;
+                        if (jiaodu < -180)
+                        {
+                            jiaodu += 360;
+                        }
+                        // jiaodu = jiaodu;
+                        var destination = turf.rhumbDestination(turf.point(model.points[0]), 500, jiaodu, { units: 'miles' });
+                        model.points.push(destination.geometry.coordinates);
+                        break;
+                }
+                return model;
+            },
+        },
         //===========================================================图层操作================================================
         layer: {
             //图层配置
@@ -2859,7 +3033,15 @@ var map_Obj = (function ()
             theme_layer_change: function (theme_layer)
             {
                 that.layer.theme_layer = theme_layer;
-                that.refreshMap();
+                let layers = that.map.getLayers();
+                layers.forEach(layeritem =>
+                {
+                    let feats = layeritem.getSource().getFeatures();
+                    feats.forEach(featitem =>
+                    {
+                        featitem.changed();
+                    });
+                });
             },
             //新建图层-根据设置
             creat: function (key, layeritem)
@@ -3042,34 +3224,28 @@ var map_Obj = (function ()
             active: function (ol_uid)
             {
                 var result = false;
-                try
+                var layers = that.map.getLayers().getArray();
+                var r = layers.filter(function (x)
                 {
-                    var layers = that.map.getLayers().getArray();
-                    var r = layers.filter(function (x)
-                    {
-                        return x.ol_uid == ol_uid;
+                    return x.ol_uid == ol_uid;
 
-                    });
-                    if (r.length > 0)
+                });
+                if (r.length > 0)
+                {
+                    if (!r[0].isenable)
                     {
-                        if (!r[0].isenable)
-                        {
-                            throw '此图层不可编辑';
-                        }
-                        that.active_layer = r[0];
+                        return false;
                     }
-
-                    //根据操作类型，切换图层
-                    that.modelChange(that.model);
-                    //清空退回栈
-                    that.undo.clear();
-                    //清空选中
-                    that.select.clearSelect();
-                    result = true;
-                } catch (ex)
-                {
-
+                    that.active_layer = r[0];
                 }
+
+                //根据操作类型，切换图层
+                that.modelChange(that.model);
+                //清空退回栈
+                that.undo.clear();
+                //清空选中
+                that.select.clearSelect();
+                result = true;
                 return result;
             },
             //获取图层，根据内置ID
@@ -3158,8 +3334,7 @@ var map_Obj = (function ()
                 return layers_r;
             },
         },
-
-        //===========================================================拾取渲染(没有撤销)================================================
+        //===========================================================拾取渲染================================================
         //
         shiquxuanran: {
             //图层
@@ -3488,7 +3663,7 @@ var map_Obj = (function ()
         //刷新地图
         refreshMap: function ()
         {
-            that.map.render();
+            that.map.renderSync();
         },
         //清空当前数据用于重新开始
         ClearAll: function ()
