@@ -389,6 +389,7 @@ var map_Obj = (function ()
         that.undo.indo(fes, isnew);
         that.active_layer.getSource().removeFeature(selected_feature);
         selected_feature = null;
+        return fes;
     }
 
     var that = {
@@ -520,7 +521,6 @@ var map_Obj = (function ()
                     var map = that.map;
                     var mapExtent = map.getView().calculateExtent(map.getSize());
                     var map_center = ol.extent.getCenter(mapExtent);
-                    //that.snapGuides.refresh();
                     //that.map_mouse_zb.innerText = "缩放级别：" + map.getView().getZoom() + "    屏幕中心点坐标：X:" + parseFloat(map_center[0]).toFixed(4) + "    Y:" + parseFloat(map_center[1]).toFixed(4);
                 });
             }
@@ -825,6 +825,8 @@ var map_Obj = (function ()
                 that.map.removeInteraction(that.draw.interaction_draw);
                 //辅助线
                 //that.map.removeInteraction(that.draw.interaction_snapGuides);
+
+                that.snap.hide();
             },
 
             //根据所画类型变化
@@ -885,6 +887,7 @@ var map_Obj = (function ()
                             break;
                     }
                     that.snapGuides.refresh();
+                    that.snap.show();
                     //画完之后如果不是画洞则给新增的图形，进行规范化数据坐标，并创建属性，加入退回栈等操作，如果是hole则单独操作
                     switch (type)
                     {
@@ -908,6 +911,11 @@ var map_Obj = (function ()
                                 {
                                     that.draw.event_draw_end(feat);
                                 }
+
+                                setTimeout(() =>
+                                {
+                                    that.snap.show();
+                                }, 100);
                             });
                             that.draw.interaction_draw.on('drawstart', function (event)
                             {
@@ -1031,6 +1039,9 @@ var map_Obj = (function ()
         //选择
         select: {
 
+            //记录选择模式--pointselect、boxselect
+            selectmodel_old: null,
+
             //选中模式下，当前操作模式:move/editpoints/clipbydraw/clip
             model: null,
             //选中模式中用于选中的操作控件
@@ -1148,8 +1159,10 @@ var map_Obj = (function ()
                 switch (that.select.model)
                 {
                     case 'pointselect':
+                        that.select.selectmodel_old = 'pointselect';
                         break;
                     case 'boxselect':
+                        that.select.selectmodel_old = 'boxselect';
                         break;
                     case 'move':
                         break;
@@ -1199,12 +1212,13 @@ var map_Obj = (function ()
                 that.select.interaction_dragbox.on('boxend', function ()
                 {
                     // 获取被选择的要素
-                    var extent = that.select.interaction_dragbox.getGeometry().getExtent();
+                    let extent = that.select.interaction_dragbox.getGeometry().getExtent();
+                    let feats = [];
                     that.active_layer.getSource().forEachFeatureIntersectingExtent(extent, function (feature)
                     {
-                        that.select.interaction_select.getFeatures().push(feature);
+                        feats.push(feature);
                     });
-                    that.select.selected_change();
+                    that.select.setSelectedFeats(feats);
                 });
                 that.map.addInteraction(that.select.interaction_dragbox);
             },
@@ -1271,6 +1285,17 @@ var map_Obj = (function ()
                 }
             },
 
+
+            //设置选中项
+            setSelectedFeats: function (feats)
+            {
+                that.select.clearSelect();
+                feats.forEach(item =>
+                {
+                    that.select.interaction_select.getFeatures().push(item);
+                });
+                that.select.selected_change();
+            },
             //获取选中项
             getSelectFeatures: function ()
             {
@@ -1623,8 +1648,6 @@ var map_Obj = (function ()
                             },
                         });
                         that.map.addInteraction(that.select.editpoints_interaction_modify);
-
-                        //刷新辅助线
                         that.snapGuides.refresh();
                         that.select.editpoints_interaction_modify.on('modifystart', function (e)
                         {
@@ -1969,7 +1992,7 @@ var map_Obj = (function ()
                                 layer.getSource().removeFeature(item);
                             });
                         }
-                        that.select.clearSelect();
+                        that.select.setSelectedFeats([fe]);
                     }
                     catch (ex)
                     {
@@ -2050,7 +2073,7 @@ var map_Obj = (function ()
                 });
                 //添加切割画线工具
                 that.map.addInteraction(that.select.clip_interaction_draw);
-                //刷新辅助线
+
                 that.snapGuides.refresh();
                 that.select.clip_interaction_draw.on('drawstart', function (event)
                 {
@@ -2064,7 +2087,8 @@ var map_Obj = (function ()
                     try
                     {
                         var feat_cutline = event.feature;
-                        select_qiege(selected_feature, event.feature);
+                        var feats = select_qiege(selected_feature, event.feature);
+                        that.select.setSelectedFeats(feats);
                     }
                     catch (e)
                     {
@@ -2078,7 +2102,7 @@ var map_Obj = (function ()
 
                             }
                         }, 100);
-                        controlObj.message.result.show("剪切失败：" + e);
+                        throw "剪切失败：" + e;
                     }
                     setTimeout(() =>
                     {
@@ -2099,7 +2123,7 @@ var map_Obj = (function ()
                 // that.select.interaction_select.setActive(true);
                 // that.select.interaction_translate.setActive(true);
 
-                that.select.clearSelect();
+                //that.select.clearSelect();
             },
             //添加切割线
             clip_show_dao: function (co)
@@ -2155,10 +2179,10 @@ var map_Obj = (function ()
                 }
                 var selected_feature = that.select.getSelectFeatures()[0];
 
-                select_qiege(selected_feature, that.select.clip_line_dao);
+                var fets = select_qiege(selected_feature, that.select.clip_line_dao);
 
                 that.select.clip_hide_dao();
-                that.select.clearSelect();
+                that.select.setSelectedFeats(fets);
             },
 
 
@@ -2275,14 +2299,26 @@ var map_Obj = (function ()
                     source: that.measure.layer.getSource(),
                     type: (type),
                     dragVertexDelay: 0,//默认500，在指针下移后将当前顶点拖动到其确切位置之前的延迟（毫秒）。【防止绘图完成后，地图移动】
+
+                    //                     that.layer.theme_layer.celiang
+                    // {name: '测量', opacity: 1, visable: 'true', size: '1', bordercolor: '#fd9d75', …}
+                    // bordercolor: "#fd9d75"
+                    // fillcolor: "#fd9d75"
+                    // fillopacity: 0.5
+                    // name: "测量"
+                    // opacity: 1
+                    // size: "1"
+                    // visable: "true"
                     style: new ol.style.Style({
                         fill: new ol.style.Fill({
-                            color: 'rgba(255, 255, 255, 0.7)'
+                            //color: 'rgba(255, 255, 255, 0.7)'                            
+                            color: that.layer.theme_layer.celiang.fillcolor + that.opacity1to16(1 - parseFloat(that.layer.theme_layer.celiang.fillopacity)),
                         }),
                         stroke: new ol.style.Stroke({
-                            color: 'rgba(255, 255, 255, 0.5)',
+                            //color: 'rgba(255, 255, 255, 0.5)',
+                            color: that.layer.theme_layer.celiang.bordercolor,
                             lineDash: [10, 10],
-                            width: 2,
+                            width: that.layer.theme_layer.celiang.size,
                         }),
                         image: new ol.style.Circle({
                             radius: 5,
@@ -2294,6 +2330,7 @@ var map_Obj = (function ()
                             })
                         })
                     })
+
                 });
                 that.map.addInteraction(that.measure.interaction_draw);
 
@@ -2316,6 +2353,10 @@ var map_Obj = (function ()
                             //横线
                             {
                                 that.measure.h_feat = new ol.Feature(new ol.geom.LineString([startco, [endco[0], startco[1]]]));
+
+                                that.measure.h_feat.mystyle = {
+                                    stroke_color: 'rgba(255, 255, 255, 0.5)'
+                                };
                                 that.measure.h_feat.lineDash = [10, 10];
                                 that.measure.layer.getSource().addFeature(that.measure.h_feat);
                                 if (that.measure.h_element)
@@ -2341,6 +2382,17 @@ var map_Obj = (function ()
                             //竖线
                             {
                                 that.measure.s_feat = new ol.Feature(new ol.geom.LineString([[endco[0], startco[1]], endco]));
+
+                                // model.stroke_width = controlObj.singledropdownlist.id('layout_yanse_cuxi');
+                                // model.stroke_color = controlObj.color.value('layout_yanse_biankuang') + 'FF';
+                                // var tmd = controlObj.slider.value('layout_yanse_tianchongtouming');
+                                // model.fill_color = controlObj.color.value('layout_yanse_tianchong') + map_Obj.opacity1to16(tmd);
+                                // model.font_size = $('#layout_ziti_daxiao')[0].value;
+                                // model.font_color = controlObj.color.value('layout_ziti_yanse');
+
+                                that.measure.s_feat.mystyle = {
+                                    stroke_color: 'rgba(255, 255, 255, 0.5)'
+                                };
                                 that.measure.s_feat.lineDash = [10, 10];
                                 that.measure.layer.getSource().addFeature(that.measure.s_feat);
                                 if (that.measure.s_element)
@@ -2547,6 +2599,30 @@ var map_Obj = (function ()
                     length = parseFloat(line.getLength()).toFixed(4);
                     output += (length) + '' + 'm';
                 }
+
+                // var points = line.getCoordinates();
+                // //东西
+                // var len_dx = points[points.length - 1][0] - points[0][0];
+                // output += '<br/>左右：<br/>';
+                // if (Math.abs(len_dx) > 1000)
+                // {
+                //     output += parseFloat(len_dx / 1000).toFixed(4) + '' + 'km';
+                // }
+                // else
+                // {
+                //     output += parseFloat(len_dx).toFixed(4) + '' + 'm';
+                // }
+                // //南北
+                // var len_nb = points[points.length - 1][1] - points[0][1];
+                // output += '<br/>上下：<br/>';
+                // if (Math.abs(len_nb) > 1000)
+                // {
+                //     output += parseFloat(len_nb / 1000).toFixed(4) + '' + 'km';
+                // }
+                // else
+                // {
+                //     output += parseFloat(len_nb).toFixed(4) + '' + 'm';
+                // }
                 output += '</div>';
                 return output;
             },
@@ -2712,7 +2788,8 @@ var map_Obj = (function ()
         },
         //导入
         daoru: {
-
+            //选中图形变化事件
+            event_selectedfeature_changed: null,
             //导入模式中用于选中的操作控件
             interaction_select: null,
             //导入
@@ -2753,16 +2830,23 @@ var map_Obj = (function ()
                             that.daoru.interaction_select.getFeatures().removeAt(i);
                         }
                     }
-                    // //触发页面显示变化
-                    // if (that.select.event_feature_co_changed != null)
-                    // {
-                    //     that.select.event_feature_co_changed();
-                    // }
+                    //触发变化
+                    if (that.daoru.event_selectedfeature_changed != null)
+                    {
+                        that.daoru.event_selectedfeature_changed();
+                    }
                 });
                 that.map.addInteraction(that.daoru.interaction_select);
             },
             end: function ()
             {
+                that.daoru.interaction_select.getFeatures().clear();
+                //触发页面显示变化
+                if (that.daoru.event_selectedfeature_changed != null)
+                {
+                    that.daoru.event_selectedfeature_changed();
+                }
+
                 //that.active_layer = that.layer.getByID('jiegou');
                 that.map.removeInteraction(that.daoru.interaction_select);
 
@@ -2774,6 +2858,11 @@ var map_Obj = (function ()
                 that.daoru.interaction_select.getFeatures().clear();
             },
 
+            //获取选中项
+            getSelectFeatures: function ()
+            {
+                return that.daoru.interaction_select.getFeatures().getArray();
+            },
             //将选中图形导入指定图层
             importFeatures: function (layerid)
             {
@@ -2798,6 +2887,7 @@ var map_Obj = (function ()
                 that.active_layer.getSource().addFeature(feat);
             },
             //===========================================================线面转换================================================
+            //交点成面
             lineStringToPolygon: function (lines)
             {
                 //判断是否所有传入值都是线
@@ -2826,7 +2916,85 @@ var map_Obj = (function ()
                 return resultfeat;
 
             },
-            //计算两条线的焦点
+            //所有点成面
+            lineStringToPolygonWithAllPoints: function (lines)
+            {
+                let linesforcount = [];
+
+                //判断是否所有传入值都是线
+                for (var i = 0; i < lines.length; i++)
+                {
+                    switch (lines[i].getGeometry().getType())
+                    {
+                        case 'Point':
+                        case 'Polygon':
+                            throw '只有线才能转换面';
+                            break;
+                        case 'LineString':
+                            let lineitem_points = lines[i].getGeometry().getCoordinates();
+                            for (let j = 1; j < lineitem_points.length; j++)
+                            {
+                                //var fe_temp = new ol.Feature(new ol.geom.LineString([lineitem_points[0],lineitem_points[1]]));
+                                linesforcount.push(new ol.Feature(new ol.geom.LineString([lineitem_points[j - 1], lineitem_points[j]])));
+                            }
+
+                            break;
+                    }
+                }
+
+                //计算起点
+                let qidian = null;
+                let lastindex = 0;
+                let current_index = 0;
+                //闭环
+                let bh = null;
+                for (let i = 0; i < linesforcount.length; i++)
+                {
+                    let line_i = linesforcount[i];
+                    for (let j = i + 1; j < linesforcount.length; j++)
+                    {
+                        let line_j = linesforcount[j];
+                        qidian = that.daoru.lineStrings_point([line_i, line_j]);
+                        if (qidian != null)
+                        {
+                            lastindex = i;
+                            current_index = j;
+                            //根据起点计算闭环
+                            bh = that.daoru.startpoints_havebh(qidian, linesforcount, lastindex, current_index);
+                            if (bh != null)
+                            {
+                                break;
+                            } else
+                            {
+                                continue;
+                            }
+                        }
+                    }
+                    if (bh != null)
+                    {
+                        break;
+                    }
+                }
+
+                //如果有闭环
+                if (bh != null)
+                {
+                    var resultfeat = new ol.Feature(new ol.geom.Polygon([bh]));//ol.coordinate.convexHull
+                    //格式化
+                    FormatFeature(resultfeat);
+                    //that.property.creat(resultfeat);
+                    return resultfeat;
+                }
+                else
+                {
+                    throw '没有闭环，不能形成面';
+                }
+
+
+
+
+            },
+            //按顺序计算两条线的焦点
             lineStringToPolygon_jiaodian: function (lines)
             {
                 //计算线交点
@@ -2848,6 +3016,103 @@ var map_Obj = (function ()
                 }
                 return jiaodian;
             },
+
+            //计算两条线的交点，如果有返回，如果没有返回null
+            lineStrings_point: function (lines)
+            {
+                let result = null;
+                let line1 = turf.lineString(lines[0].getGeometry().getCoordinates());
+                let line2 = turf.lineString(lines[1].getGeometry().getCoordinates());
+                let intersects = turf.lineIntersect(line1, line2);
+                if (intersects.features.length > 0)
+                {
+                    result = intersects.features[0].geometry.coordinates;
+                }
+                return result;
+            },
+
+            //计算此起点是否有闭环,有闭环返回点集，没有返回null
+            startpoints_havebh: function (qidian, linesforcount, lastindex, current_index)
+            {
+                var points = [qidian];
+                let result = that.daoru.lineStrings_dg(qidian, points, linesforcount, lastindex, current_index);
+                if (!result)
+                {
+                    return null;
+                }
+                else
+                {
+                    return points;
+                }
+            },
+
+            //深度计算--开始点,已计算的点集，所有线，上一条线的位置
+            lineStrings_dg: function (startpoint, points, lines, lastindex, current_index)
+            {
+                //是否有找到焦点
+                let isjd = false;
+                //循环所有的线，不包含自己和上一条线
+                for (let i = 0; i < lines.length; i++)
+                {
+                    if (i != lastindex && i != current_index)
+                    {
+                        let point_jd = that.daoru.lineStrings_point([lines[current_index], lines[i]]);
+                        if (point_jd != null)
+                        {
+                            //是否已结束
+                            if (point_jd[0] == startpoint[0] && point_jd[1] == startpoint[1])
+                            {
+                                isjd = true;
+                                points.push(point_jd);
+                                return true;
+                            }
+                            else if (that.daoru.points_contains(points, point_jd))//不能加重复的点
+                            {
+                                continue
+                            }
+                            else
+                            {
+                                isjd = true;
+                                points.push(point_jd);
+                                //继续深入
+                                let isok = that.daoru.lineStrings_dg(startpoint, points, lines, current_index, i);
+                                if (isok)
+                                {
+                                    return isok
+                                }
+                                else
+                                {
+                                    points.pop(point_jd);
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!isjd)
+                {
+                    return false;
+                }
+            },
+            //坐标集合中是否包含此点坐标
+            points_contains: function (points, point)
+            {
+                let result = points.filter(item =>
+                {
+                    return (item[0] == point[0] && item[1] == point[1]);
+                });
+                if (result.length > 0)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+
+            },
+
+
+
         },
         //===========================================================辅助线================================================
         snapGuides: {
@@ -3080,6 +3345,14 @@ var map_Obj = (function ()
                             //字体相关
                             style.getText().setFont(feature.mystyle.font_size + 'px Microsoft YaHei');
                             style.getText().getFill().setColor(feature.mystyle.font_color);
+
+                            //测量图层虚线
+                            switch (that.layer.getByFeature(feature).id)
+                            {
+                                case 'celiang':
+                                    style.getStroke().setLineDash(feature.lineDash);
+                                    break;
+                            }
                         }
                         else
                         {
@@ -3239,8 +3512,16 @@ var map_Obj = (function ()
                     that.active_layer = r[0];
                 }
 
-                //根据操作类型，切换图层
-                that.modelChange(that.model);
+
+                switch (that.model)
+                {
+                    case "select":
+                        break;
+                    default:
+                        //根据操作类型，切换图层
+                        that.modelChange(that.model);
+                        break;
+                }
                 //清空退回栈
                 that.undo.clear();
                 //清空选中
@@ -3334,7 +3615,8 @@ var map_Obj = (function ()
                 return layers_r;
             },
         },
-        //===========================================================拾取渲染================================================
+
+        //===========================================================拾取渲染(没有撤销)================================================
         //
         shiquxuanran: {
             //图层
