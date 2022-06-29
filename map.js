@@ -1085,20 +1085,63 @@ var map_Obj = (function ()
                 that.select.interaction_select = new ol.interaction.Select({
                     style: function (feature)
                     {
+                        var selectStyles = [];
                         //保持原有样式画虚线
                         var tempstyle = that.layer.getByFeature(feature).getStyle()(feature);
-                        tempstyle.getStroke().setLineDash([10, 10]);
-                        //保持原有样式
-                        // var tempstyle = selectTextStyle.clone();
-                        // var name = feature.name;
-                        // if (name != null && name != undefined)
-                        // {
-                        //     tempstyle.getText().setText("" + name + "");
-                        // }
-                        return tempstyle;
+                        selectStyles.push(tempstyle)
+                        if (feature.getGeometry().getType() == "Point") 
+                        {
+                            //var width = parseInt(tempstyle.getImage().getStroke().getWidth()) * 2;
+                            //var color = tempstyle.getImage().getFill().getColor();
+                            var radius = parseInt(tempstyle.getImage().getRadius());
+
+                            selectStyles.push(
+                                new ol.style.Style({
+
+                                    image: new ol.style.Circle({
+                                        radius: radius,
+                                        // fill: new ol.style.Fill({
+                                        //     color: [0, 255, 255, 1 / (steps - i)],
+                                        // }),
+                                        stroke: new ol.style.Stroke({
+                                            color: [0, 255, 255, 1],
+                                            width: 6
+                                        }),
+                                    })
+
+
+                                })
+                            );
+                        }
+                        else
+                        {
+                            //tempstyle.getStroke().setLineDash([10, 10]);
+                            //保持原有样式
+                            // var tempstyle = selectTextStyle.clone();
+                            // var name = feature.name;
+                            // if (name != null && name != undefined)
+                            // {
+                            //     tempstyle.getText().setText("" + name + "");
+                            // }
+
+                            var width = parseInt(tempstyle.getStroke().getWidth()) + 2;
+                            selectStyles.push(
+                                new ol.style.Style({
+                                    stroke: new ol.style.Stroke({
+                                        color: [0, 255, 255, 1],
+                                        width: width
+                                    }),
+                                })
+                            );
+                        }
+
+
+
+                        return selectStyles;
                     },
                     multi: true,
                 });
+
 
                 that.select.interaction_select.on('select', that.select.selected_change);
                 that.map.addInteraction(that.select.interaction_select);
@@ -1815,7 +1858,10 @@ var map_Obj = (function ()
                         that.select.editpoints_preview_feature = null;
                     }
                     //格式化编辑后的图形
-                    FormatFeature(that.select.getSelectFeatures()[0]);
+                    if (that.select.getSelectFeatures().length > 0)
+                    {
+                        FormatFeature(that.select.getSelectFeatures()[0]);
+                    }
                     //放开选中和移动
                     // that.select.interaction_select.setActive(true);
                     // that.select.interaction_translate.setActive(true);
@@ -2184,7 +2230,6 @@ var map_Obj = (function ()
                 that.select.clip_hide_dao();
                 that.select.setSelectedFeats(fets);
             },
-
 
         },
         //变换
@@ -2792,6 +2837,8 @@ var map_Obj = (function ()
             event_selectedfeature_changed: null,
             //导入模式中用于选中的操作控件
             interaction_select: null,
+            //选中模式中用于框选中的操作控件
+            interaction_dragbox: null,
             //导入
             start: function ()
             {
@@ -2858,6 +2905,63 @@ var map_Obj = (function ()
                 that.daoru.interaction_select.getFeatures().clear();
             },
 
+            //框选，开始结束
+            pointselect_start: function ()
+            {
+                that.daoru.interaction_select.setActive(true);
+            },
+            pointselect_end: function ()
+            {
+                that.daoru.interaction_select.setActive(false);
+                //that.map.removeInteraction(that.select.interaction_select);
+            },
+
+            //框选，开始结束
+            boxselect_start: function ()
+            {
+                //框选工具
+                // 创建绘制工具
+                that.daoru.interaction_dragbox = new ol.interaction.DragBox({
+                    condition: ol.events.condition.always,
+                    className: 'mapObj-select-boxselect',
+                });
+
+                // 开始绘制，
+                that.daoru.interaction_dragbox.on('boxstart', function ()
+                {
+                    that.daoru.interaction_select.getFeatures().clear();
+                });
+
+                // 结束绘制
+                that.daoru.interaction_dragbox.on('boxend', function ()
+                {
+                    // 获取被选择的要素
+                    let extent = that.daoru.interaction_dragbox.getGeometry().getExtent();
+                    let feats = [];
+                    that.active_layer.getSource().forEachFeatureIntersectingExtent(extent, function (feature)
+                    {
+                        feats.push(feature);
+                    });
+                    that.daoru.setSelectedFeats(feats);
+                });
+                that.map.addInteraction(that.daoru.interaction_dragbox);
+            },
+            boxselect_end: function ()
+            {
+                that.map.removeInteraction(that.daoru.interaction_dragbox);
+            },
+
+
+            //设置选中项
+            setSelectedFeats: function (feats)
+            {
+                that.daoru.interaction_select.getFeatures().clear();
+                feats.forEach(item =>
+                {
+                    that.daoru.interaction_select.getFeatures().push(item);
+                });
+                //that.daoru.selected_change();
+            },
             //获取选中项
             getSelectFeatures: function ()
             {
@@ -2880,43 +2984,20 @@ var map_Obj = (function ()
             },
 
             //增加图形
-            addFeature: function (feat, co)
+            addFeatures: function (feats)
             {
-                feat.getGeometry().setCoordinates(co);
-                that.undo.indo([feat], [true]);
-                that.active_layer.getSource().addFeature(feat);
+                let isnew = [];
+                for (let i = 0; i < feats.length; i++)
+                {
+                    isnew.push(true);
+                    that.active_layer.getSource().addFeature(feats[i]);
+                }
+                that.undo.indo(feats, isnew);
+                //that.layer.getByID('daoru').getSource().addFeature(feat);
             },
             //===========================================================线面转换================================================
-            //交点成面
-            lineStringToPolygon: function (lines)
-            {
-                //判断是否所有传入值都是线
-                for (var i = 0; i < lines.length; i++)
-                {
-                    switch (lines[i].getGeometry().getType())
-                    {
-                        case 'Point':
-                        case 'Polygon':
-                            throw '只有线才能转换面';
-                            break;
-                        case 'LineString':
-                            break;
-                    }
-                }
-                var jiaodians = that.daoru.lineStringToPolygon_jiaodian(lines);
 
-                if (jiaodians.length < 3)
-                {
-                    throw '交点个数太少，不能形成面';
-                }
-                var resultfeat = new ol.Feature(new ol.geom.Polygon([(jiaodians)]));//ol.coordinate.convexHull
-                //格式化
-                FormatFeature(resultfeat);
-                //that.property.creat(resultfeat);
-                return resultfeat;
-
-            },
-            //所有点成面
+            //所有点闭环成面
             lineStringToPolygonWithAllPoints: function (lines)
             {
                 let linesforcount = [];
@@ -2928,7 +3009,7 @@ var map_Obj = (function ()
                     {
                         case 'Point':
                         case 'Polygon':
-                            throw '只有线才能转换面';
+                            //throw '只有线才能转换面';
                             break;
                         case 'LineString':
                             let lineitem_points = lines[i].getGeometry().getCoordinates();
@@ -2942,176 +3023,321 @@ var map_Obj = (function ()
                     }
                 }
 
+                //计算所有线的交点，并根据交点截断线,目标是将所有线段分成不相交的线
+                for (let i = 0; i < linesforcount.length; i++)
+                {
+                    let line_i = linesforcount[i];
+                    let line_i_co = line_i.getGeometry().getCoordinates();
+                    //交叉计算所有线的交点
+                    for (let j = 0; j < linesforcount.length; j++)
+                    {
+                        if (i != j)
+                        {
+                            let line_j = linesforcount[j];
+                            let line_j_co = line_j.getGeometry().getCoordinates();
+                            let co = mapToolObj.lineArray_co_jiaodian([line_i, line_j]);
+                            if (co != null)
+                            {
+                                //交点不是线段首尾,通过另一个GeoJSONFeature分割一个LineString。
+                                if (!mapToolObj.co_bool_ArrayContains(line_j_co, co))
+                                {
+                                    var line = turf.lineString(line_j_co);
+                                    var splitter = turf.lineString(line_i_co);
+
+                                    var split = turf.lineSplit(line, splitter);
+
+                                    //移除当前线段，增加两条线段
+                                    linesforcount.splice(j, 1);
+                                    //插入
+                                    split.features.forEach(item =>
+                                    {
+                                        linesforcount.splice(j, 0, new ol.Feature(new ol.geom.LineString(item.geometry.coordinates)));
+                                    })
+                                    j--;
+                                }
+                                //交点不是线段首尾,通过另一个GeoJSONFeature分割一个LineString。
+                                if (!mapToolObj.co_bool_ArrayContains(line_i_co, co))
+                                {
+                                    var line = turf.lineString(line_i_co);
+                                    var splitter = turf.lineString(line_j_co);
+
+                                    var split = turf.lineSplit(line, splitter);
+
+                                    //移除当前线段，增加两条线段
+                                    linesforcount.splice(i, 1);
+                                    //插入
+                                    split.features.forEach(item =>
+                                    {
+                                        linesforcount.splice(i, 0, new ol.Feature(new ol.geom.LineString(item.geometry.coordinates)));
+                                    });
+                                    i--;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                }
+                if (linesforcount.length > 50)
+                {
+                    throw '选中的线形成的交点太多，请选少些，逐次操作！';
+                }
+                // //循环所有线展示
+                // let result = [];
+                // for (let i = 0; i < linesforcount.length; i++)
+                // {
+                //     let points = linesforcount[i].getGeometry().getCoordinates();
+                //     // for (let j = 0; j < points.length; j++)
+                //     // {
+                //     //     points[j][0] += (i * 10);
+                //     // }
+
+                //     let resultfeat = new ol.Feature(new ol.geom.LineString(points));
+                //     //格式化
+                //     // FormatFeature(resultfeat);
+                //     // that.property.creat(resultfeat);
+                //     resultfeat.name = i + '';
+                //     result.push(resultfeat);
+
+                // }
+                // return result;
+
                 //计算起点
                 let qidian = null;
                 let lastindex = 0;
                 let current_index = 0;
                 //闭环
-                let bh = null;
+                let bhs = [];
                 for (let i = 0; i < linesforcount.length; i++)
                 {
                     let line_i = linesforcount[i];
-                    for (let j = i + 1; j < linesforcount.length; j++)
+                    let cos = line_i.getGeometry().getCoordinates();
+                    for (let j = 0; j < cos.length; j++)
                     {
-                        let line_j = linesforcount[j];
-                        qidian = that.daoru.lineStrings_point([line_i, line_j]);
-                        if (qidian != null)
+                        qidian = cos[j];
+                        let nextlines = mapToolObj.lines_co_lines_containsco_withoutindex(linesforcount, qidian, []);
+                        if (nextlines.length > 1)//&& !mapToolObj.co_bool_ArrayArrayContains(bhs, qidian))
                         {
-                            lastindex = i;
-                            current_index = j;
-                            //根据起点计算闭环
-                            bh = that.daoru.startpoints_havebh(qidian, linesforcount, lastindex, current_index);
-                            if (bh != null)
-                            {
-                                break;
-                            } else
-                            {
-                                continue;
-                            }
+                            that.daoru.startpoints_havebh_new(bhs, qidian, linesforcount, nextlines);
                         }
                     }
-                    if (bh != null)
-                    {
-                        break;
-                    }
+
                 }
 
-                //如果有闭环
-                if (bh != null)
+
+
+                //将所有闭环切成最小的块
+                // for (let i = 0; i < bhs.length; i++)
+                // {
+                //     let co_i = bhs[i];
+                //     let turf_polygon_i = turf.polygon([bhs[i]], {});
+                //     for (let j = 0; j < bhs.length; j++)
+                //     {
+                //         if (i != j)
+                //         {
+                //             let co_j = bhs[j];
+                //             let turf_polygon_j = turf.polygon([bhs[j]], {});
+
+                //             //是否有交集
+                //             var intersection = turf.intersect(turf_polygon_i, turf_polygon_j);
+                //             if (intersection != null)
+                //             {
+                //                 if (intersection.geometry.type == "Polygon")
+                //                 {
+                //                     //计算差
+                //                     var turf_polygon_i_dif = turf.difference(turf_polygon_i, turf_polygon_j);
+                //                     if (turf_polygon_i_dif != null)
+                //                     {
+                //                         let cybh = [];
+                //                         switch (turf_polygon_i_dif.geometry.type)
+                //                         {
+                //                             case "Polygon":
+                //                                 cybh.push(turf_polygon_i_dif.geometry.coordinates);
+                //                                 break;
+                //                             case "MultiPolygon":
+                //                                 cybh = (turf_polygon_i_dif.geometry.coordinates);
+                //                                 break;
+                //                         }
+
+                //                         //移除当前闭环，增加差异闭环
+                //                         bhs.splice(i, 1);
+                //                         //插入
+                //                         for (let cy_i = 0; cy_i < cybh.length; cy_i++)
+                //                         {
+                //                             for (let cy_j = 0; cy_j < cybh[cy_i].length; cy_j++)
+                //                             {
+                //                                 mapToolObj.bh_format(cybh[cy_i][cy_j]);
+
+                //                                 bhs.splice(i, 0, cybh[cy_i][cy_j]);
+                //                             }
+                //                         }
+                //                         i--;
+                //                         break;
+                //                     }
+                //                 }
+                //             }
+                //         }
+                //     }
+                // }
+
+                //去除重复的图形
+                // for (let i = 0; i < bhs.length; i++)
+                // {
+                //     let co_i = bhs[i];
+                //     let turf_polygon_i = turf.polygon([bhs[i]], {});
+                //     for (let j = i + 1; j < bhs.length; j++)
+                //     {
+                //         let co_j = bhs[j];
+                //         let turf_polygon_j = turf.polygon([bhs[j]], {});
+                //         if (turf.booleanEqual(turf_polygon_i, turf_polygon_j))
+                //         {
+                //             //移除当前闭环
+                //             bhs.splice(i, 1);
+                //             i--;
+                //             break;
+                //         }
+                //     }
+                // }
+
+
+                //循环所有闭环坐标集合，形成图形
+                let result = [];
+                for (let i = 0; i < bhs.length; i++)
                 {
-                    var resultfeat = new ol.Feature(new ol.geom.Polygon([bh]));//ol.coordinate.convexHull
+                    let points = bhs[i];
+                    // for (let j = 0; j < points.length; j++)
+                    // {
+                    //     points[j][0] += (i * 10);
+                    // }
+
+                    let resultfeat = new ol.Feature(new ol.geom.Polygon([points]));
                     //格式化
-                    FormatFeature(resultfeat);
-                    //that.property.creat(resultfeat);
-                    return resultfeat;
-                }
-                else
-                {
-                    throw '没有闭环，不能形成面';
-                }
+                    // FormatFeature(resultfeat);
+                    // that.property.creat(resultfeat);
+                    resultfeat.name = i + '';
+                    result.push(resultfeat);
 
-
-
-
-            },
-            //按顺序计算两条线的焦点
-            lineStringToPolygon_jiaodian: function (lines)
-            {
-                //计算线交点
-                var jiaodian = [];
-                for (var i = 0; i < lines.length; i++)
-                {
-                    var line1 = turf.lineString(lines[i].getGeometry().getCoordinates());
-                    var line2 = turf.lineString(lines[(i + 1) % lines.length].getGeometry().getCoordinates());
-                    var intersects = turf.lineIntersect(line1, line2);
-                    if (intersects.features.length > 0)
-                    {
-                        jiaodian.push(intersects.features[0].geometry.coordinates);
-                    }
-
-                }
-                if (jiaodian.length > 2)
-                {
-                    jiaodian.push(jiaodian[0]);
-                }
-                return jiaodian;
-            },
-
-            //计算两条线的交点，如果有返回，如果没有返回null
-            lineStrings_point: function (lines)
-            {
-                let result = null;
-                let line1 = turf.lineString(lines[0].getGeometry().getCoordinates());
-                let line2 = turf.lineString(lines[1].getGeometry().getCoordinates());
-                let intersects = turf.lineIntersect(line1, line2);
-                if (intersects.features.length > 0)
-                {
-                    result = intersects.features[0].geometry.coordinates;
                 }
                 return result;
+
             },
 
             //计算此起点是否有闭环,有闭环返回点集，没有返回null
-            startpoints_havebh: function (qidian, linesforcount, lastindex, current_index)
+            startpoints_havebh_new: function (bhs, qidian, linesforcount, nextlines)
             {
+                mapToolObj.co_co_format_6(qidian);
                 var points = [qidian];
-                let result = that.daoru.lineStrings_dg(qidian, points, linesforcount, lastindex, current_index);
-                if (!result)
+                var lines = [];
+                var bhsforqidian = [];
+                let result = that.daoru.lineStrings_dg_new(bhsforqidian, qidian, points, lines, linesforcount, nextlines);
+                if (bhsforqidian.length > 0)
                 {
-                    return null;
-                }
-                else
-                {
-                    return points;
-                }
-            },
-
-            //深度计算--开始点,已计算的点集，所有线，上一条线的位置
-            lineStrings_dg: function (startpoint, points, lines, lastindex, current_index)
-            {
-                //是否有找到焦点
-                let isjd = false;
-                //循环所有的线，不包含自己和上一条线
-                for (let i = 0; i < lines.length; i++)
-                {
-                    if (i != lastindex && i != current_index)
+                    //找到最小的闭环
+                    let isfinded = false;
+                    let minquzhi = bhsforqidian[0].length;
+                    let minindex = 0;
+                    //首先找到一个不是在已有闭环集合中的闭环
+                    for (let i = 0; i < bhsforqidian.length; i++)
                     {
-                        let point_jd = that.daoru.lineStrings_point([lines[current_index], lines[i]]);
-                        if (point_jd != null)
+                        if (!mapToolObj.bhs_bool_contains(bhs, bhsforqidian[i]))
                         {
-                            //是否已结束
-                            if (point_jd[0] == startpoint[0] && point_jd[1] == startpoint[1])
+                            minquzhi = bhsforqidian[i].length;
+                            minindex = i;
+                            isfinded = true;
+                            break;
+                        }
+                    }
+                    //寻找有没有更小的闭环
+                    for (let i = minindex; i < bhsforqidian.length; i++)
+                    {
+                        if (bhsforqidian[i].length < minquzhi)
+                        {
+                            //判读是不是包含在闭环中
+                            if (!mapToolObj.bhs_bool_contains(bhs, bhsforqidian[i]))
                             {
-                                isjd = true;
-                                points.push(point_jd);
-                                return true;
-                            }
-                            else if (that.daoru.points_contains(points, point_jd))//不能加重复的点
-                            {
-                                continue
-                            }
-                            else
-                            {
-                                isjd = true;
-                                points.push(point_jd);
-                                //继续深入
-                                let isok = that.daoru.lineStrings_dg(startpoint, points, lines, current_index, i);
-                                if (isok)
-                                {
-                                    return isok
-                                }
-                                else
-                                {
-                                    points.pop(point_jd);
-                                }
+                                minquzhi = bhsforqidian[i].length;
+                                minindex = i;
+                                isfinded = true;
                             }
                         }
                     }
-                }
-                if (!isjd)
-                {
-                    return false;
+
+                    if (isfinded)
+                    {
+                        //是否被已有闭环包含
+                        let bhs_index = mapToolObj.bhs_index_contains_booleanContains(bhs, bhsforqidian[minindex]);
+                        if (bhs_index != null)
+                        {
+                            //移除闭环集合中，返回的index,并添加当前找到的闭环
+                            bhs.splice(bhs_index, 1);
+                            bhs.splice(bhs_index, 0, bhsforqidian[minindex]);
+                        }
+
+                        //是否包含，已有闭环
+                        let bh_bool = mapToolObj.bhs_bool_contains_booleanContains(bhsforqidian[minindex], bhs);
+                        if (!bh_bool)
+                        {
+                            bhs.push(bhsforqidian[minindex]);
+                        }
+                    }
                 }
             },
-            //坐标集合中是否包含此点坐标
-            points_contains: function (points, point)
+
+
+
+
+            //深度计算
+            lineStrings_dg_new: function (bhsforqidian, lastco, points, lines, linesforcount, currentlines)
             {
-                let result = points.filter(item =>
+                //循环所有的线，不包含自己和上一条线
+                for (let i = 0; i < currentlines.length; i++)
                 {
-                    return (item[0] == point[0] && item[1] == point[1]);
-                });
-                if (result.length > 0)
-                {
-                    return true;
+                    //获取此线的下一个点
+                    let nextco = null
+                    let cos = currentlines[i].getGeometry().getCoordinates();
+                    if (!mapToolObj.co_bool_same(lastco, cos[0]))
+                    {
+                        nextco = cos[0];
+                    }
+                    else
+                    {
+                        nextco = cos[1];
+                    }
+                    mapToolObj.co_co_format_6(nextco);
+                    //判断是否与起点相同
+                    if (mapToolObj.co_bool_same(points[0], nextco))
+                    {
+                        //判断最少3个点
+                        if (points.length >= 3)
+                        {
+                            points.push(points[0]);
+                            //符合右手原则
+                            let counterClockwiseRing = turf.lineString(points);
+                            if (!turf.booleanClockwise(counterClockwiseRing))
+                            {
+                                bhsforqidian.push(JSON.parse(JSON.stringify(points)));
+                            }
+                            points.pop(points[0]);
+                        }
+                    } else if (mapToolObj.co_bool_ArrayContains(points, nextco))//如果已包含当前点，则继续
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        //寻找这个点的线，本线除外
+                        lines.push(currentlines[i]);
+                        let nextlines = mapToolObj.lines_co_lines_containsco_withoutindex(linesforcount, nextco, lines);
+                        if (nextlines.length > 0)
+                        {
+                            points.push(nextco);
+                            let b = that.daoru.lineStrings_dg_new(bhsforqidian, nextco, points, lines, linesforcount, nextlines);
+                            points.pop(nextco);
+                        }
+                        lines.pop(currentlines[i]);
+                    }
                 }
-                else
-                {
-                    return false;
-                }
-
             },
-
-
 
         },
         //===========================================================辅助线================================================
@@ -3511,7 +3737,6 @@ var map_Obj = (function ()
                     }
                     that.active_layer = r[0];
                 }
-
 
                 switch (that.model)
                 {
