@@ -85,7 +85,6 @@ var mapToolObj = (function ()
                 {
                     linesnew.push(newlines[i]);
                 }
-
             }
             return linesnew;
 

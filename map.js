@@ -1056,7 +1056,7 @@ var map_Obj = (function ()
         //选择
         select: {
 
-            //记录选择模式--pointselect、boxselect
+            //记录选择模式，上一次选中模式--pointselect、boxselect
             selectmodel_old: null,
 
             //选中模式下，当前操作模式:move/editpoints/clipbydraw/clip
@@ -1265,7 +1265,7 @@ var map_Obj = (function ()
                 // 开始绘制，
                 that.select.interaction_dragbox.on('boxstart', function ()
                 {
-                    that.select.interaction_select.getFeatures().clear();
+                    //that.select.interaction_select.getFeatures().clear();
                 });
 
                 // 结束绘制
@@ -1278,7 +1278,26 @@ var map_Obj = (function ()
                     {
                         feats.push(feature);
                     });
-                    that.select.setSelectedFeats(feats);
+
+                    if (that.keyEvent != null)
+                    {
+                        if (that.keyEvent.shiftKey)
+                        {
+                            that.select.appendSelectedFeats(feats);
+                        }
+                        else if (that.keyEvent.altKey)
+                        {
+                            that.select.removeSelectedFeats(feats);
+                        }
+                        else
+                        {
+                            that.select.setSelectedFeats(feats);
+                        }
+                    }
+                    else
+                    {
+                        that.select.setSelectedFeats(feats);
+                    }
                 });
                 that.map.addInteraction(that.select.interaction_dragbox);
             },
@@ -1346,6 +1365,28 @@ var map_Obj = (function ()
             },
 
 
+            //取消选中项
+            removeSelectedFeats: function (feats)
+            {
+                let current_selected = that.select.interaction_select.getFeatures().getArray();
+                let unselectfeats = feats.filter(v => current_selected.some((item) => item === v));
+                unselectfeats.forEach(item =>
+                {
+                    that.select.interaction_select.getFeatures().remove(item);
+                });
+                that.select.selected_change();
+            },
+            //追加选中项
+            appendSelectedFeats: function (feats)
+            {
+                let current_selected = that.select.interaction_select.getFeatures().getArray();
+                let newfeats = feats.filter(v => !current_selected.some((item) => item === v));
+                newfeats.forEach(item =>
+                {
+                    that.select.interaction_select.getFeatures().push(item);
+                });
+                that.select.selected_change();
+            },
             //设置选中项
             setSelectedFeats: function (feats)
             {
@@ -2891,8 +2932,9 @@ var map_Obj = (function ()
                     multi: true,
                 });
 
-                that.daoru.interaction_select.on('select', function ()
+                that.daoru.interaction_select.on('select', function (event)
                 {
+
                     //判断选中项是否为当前layer
                     var features = that.daoru.interaction_select.getFeatures().getArray();
                     for (var i = 0; i < features.length; i++)
@@ -2932,7 +2974,7 @@ var map_Obj = (function ()
                 that.daoru.interaction_select.getFeatures().clear();
             },
 
-            //框选，开始结束
+            //点选，开始结束
             pointselect_start: function ()
             {
                 that.daoru.interaction_select.setActive(true);
@@ -3007,8 +3049,12 @@ var map_Obj = (function ()
                 unselectfeats.forEach(item =>
                 {
                     that.daoru.interaction_select.getFeatures().remove(item);
-                });
-                //that.daoru.selected_change();
+                }); 
+                //触发变化
+                if (that.daoru.event_selectedfeature_changed != null)
+                {
+                    that.daoru.event_selectedfeature_changed();
+                }
             },
             //追加选中项
             appendSelectedFeats: function (feats)
@@ -3020,7 +3066,11 @@ var map_Obj = (function ()
                 {
                     that.daoru.interaction_select.getFeatures().push(item);
                 });
-                //that.daoru.selected_change();
+                //触发变化
+                if (that.daoru.event_selectedfeature_changed != null)
+                {
+                    that.daoru.event_selectedfeature_changed();
+                }
             },
             //设置选中项
             setSelectedFeats: function (feats)
@@ -3030,7 +3080,11 @@ var map_Obj = (function ()
                 {
                     that.daoru.interaction_select.getFeatures().push(item);
                 });
-                //that.daoru.selected_change();
+                 //触发变化
+                 if (that.daoru.event_selectedfeature_changed != null)
+                 {
+                     that.daoru.event_selectedfeature_changed();
+                 }
             },
             //获取选中项
             getSelectFeatures: function ()
@@ -3352,9 +3406,6 @@ var map_Obj = (function ()
                     }
                 }
             },
-
-
-
 
             //深度计算
             lineStrings_dg_new: function (bhsforqidian, lastco, points, lines, linesforcount, currentlines)
