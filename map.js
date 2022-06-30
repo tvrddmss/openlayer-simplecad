@@ -410,6 +410,9 @@ var map_Obj = (function ()
         //激活的图层
         active_layer: null,
 
+        //键盘事件
+        keyEvent: null,
+
         //初始化
         init: function (theme_layer)
         {
@@ -439,6 +442,13 @@ var map_Obj = (function ()
                 that.map.once('postcompose', function (event)
                 {
                     that.canvas = event.context.canvas;
+                });
+                //画布旋转
+                that.map.getView().on('change:rotation', function (event)
+                {
+                    var cc = that.map.getView().getRotation();
+                    $('.layout-leftmenu-icon.chushi').css('transform', 'rotate(' + cc + 'rad)');
+
                 });
 
                 //===============辅助线初始化坐标原点============================
@@ -744,6 +754,13 @@ var map_Obj = (function ()
             // 设置地图中心，将地图移动到中心点
             that.map.getView().setCenter([0, 0]);
             //map.getView().setZoom(16);
+            that.map.render();
+        },
+        //初始角度
+        rota: function ()
+        {
+            //回归初始角度
+            that.map.getView().setRotation(0);
             that.map.render();
         },
         //===========================================================模式变化相关================================================
@@ -2580,6 +2597,16 @@ var map_Obj = (function ()
             },
 
 
+            //中止画图
+            finishDraw: function (bo)
+            {
+                if (bo)
+                {
+                    that.measure.interaction_draw.removeLastPoint();
+                }
+                that.measure.interaction_draw.finishDrawing();
+            },
+
             //创建测量工具提示
             createTooltip: function ()
             {
@@ -2929,7 +2956,7 @@ var map_Obj = (function ()
                 // 开始绘制，
                 that.daoru.interaction_dragbox.on('boxstart', function ()
                 {
-                    that.daoru.interaction_select.getFeatures().clear();
+                    //that.daoru.interaction_select.getFeatures().clear();
                 });
 
                 // 结束绘制
@@ -2942,7 +2969,26 @@ var map_Obj = (function ()
                     {
                         feats.push(feature);
                     });
-                    that.daoru.setSelectedFeats(feats);
+
+                    if (that.keyEvent != null)
+                    {
+                        if (that.keyEvent.shiftKey)
+                        {
+                            that.daoru.appendSelectedFeats(feats);
+                        }
+                        else if (that.keyEvent.altKey)
+                        {
+                            that.daoru.removeSelectedFeats(feats);
+                        }
+                        else
+                        {
+                            that.daoru.setSelectedFeats(feats);
+                        }
+                    }
+                    else
+                    {
+                        that.daoru.setSelectedFeats(feats);
+                    }
                 });
                 that.map.addInteraction(that.daoru.interaction_dragbox);
             },
@@ -2952,6 +2998,30 @@ var map_Obj = (function ()
             },
 
 
+            //取消选中项
+            removeSelectedFeats: function (feats)
+            {
+                let current_selected = that.daoru.interaction_select.getFeatures().getArray();
+                let unselectfeats = feats.filter(v => current_selected.some((item) => item === v));
+                // that.daoru.interaction_select.getFeatures().clear();
+                unselectfeats.forEach(item =>
+                {
+                    that.daoru.interaction_select.getFeatures().remove(item);
+                });
+                //that.daoru.selected_change();
+            },
+            //追加选中项
+            appendSelectedFeats: function (feats)
+            {
+                let current_selected = that.daoru.interaction_select.getFeatures().getArray();
+                let newfeats = feats.filter(v => !current_selected.some((item) => item === v));
+                // that.daoru.interaction_select.getFeatures().clear();
+                newfeats.forEach(item =>
+                {
+                    that.daoru.interaction_select.getFeatures().push(item);
+                });
+                //that.daoru.selected_change();
+            },
             //设置选中项
             setSelectedFeats: function (feats)
             {
@@ -3925,6 +3995,8 @@ var map_Obj = (function ()
                         case 'jiegou'://结构
                         case 'tukuai'://土块':
                         case 'shuiwei'://水位':
+                        case 'daoru'://导入':
+                        case 'hezai'://荷载':
                             var tempfeats = layeritem.getSource().getFeatures();
                             tempfeats.forEach(feat =>
                             {
